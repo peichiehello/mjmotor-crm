@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MG SSI 交車滿意度戰情室</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        mg: { red: '#b91c1c', darkred: '#991b1b', gray: '#111827', lightbg: '#f8fafc' }
+                    }
+                }
+            }
+        }
+    </script>
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.10.4/umd/Recharts.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f3f4f6; }
+        /* 方案 A 頁面標題區 */
+        .page-header { background: white; border-bottom: 1px solid #e5e7eb; padding: 14px 24px; position: sticky; top: 0; z-index: 50; }
+        .page-header .breadcrumb { font-size: 11px; color: #9ca3af; margin-bottom: 6px; }
+        .page-header .title-row { display: flex; align-items: flex-start; gap: 10px; }
+        .page-header .red-accent { width: 3px; min-height: 22px; background: #b91c1c; border-radius: 2px; margin-top: 2px; flex-shrink: 0; }
+        .page-header h1 { font-size: 17px; font-weight: 600; color: #111827; line-height: 1.3; margin: 0; }
+        .page-header .subtitle { font-size: 12px; color: #6b7280; margin-top: 2px; }
+        .page-header .toolbar { display: flex; align-items: center; gap: 8px; margin-top: 10px; margin-left: 13px; flex-wrap: wrap; }
+        .page-header .action-btn { font-size: 12px; padding: 4px 12px; border-radius: 6px; border: 1px solid #e5e7eb; background: #f9fafb; color: #374151; cursor: pointer; font-family: inherit; }
+        .page-header .action-btn.danger { border-color: #fca5a5; background: #fff5f5; color: #b91c1c; }
+        .page-header .file-badge { font-size: 11px; padding: 3px 8px; border-radius: 6px; background: #dcfce7; color: #166534; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .detail-table { border-collapse: collapse; width: 100%; font-size: 0.78rem; }
+        .detail-table thead { overflow: visible; }
+        .detail-table th, .detail-table td { border: 1px solid #e5e7eb; padding: 5px 8px; text-align: center; white-space: nowrap; }
+        .detail-table th { background-color: #f1f5f9; font-weight: 600; font-size: 0.72rem; overflow: visible; position: relative; }
+        .plant-header-row { background-color: #dbeafe; font-weight: bold; text-align: left; font-size: 0.82rem; }
+        .subtotal-row { background-color: #fef3c7; font-weight: 600; }
+        .sticky-name { position: sticky; left: 0; z-index: 11; background-color: white; border-right: 2px solid #e5e7eb; min-width: 80px; max-width: 80px; width: 80px; }
+        .sticky-role { position: sticky; left: 80px; z-index: 11; background-color: white; border-right: 2px solid #e5e7eb; min-width: 56px; max-width: 56px; width: 56px; }
+        .low-score { color: #dc2626; font-weight: bold; }
+        .tooltip-wrapper { position: relative; display: inline-block; overflow: visible; }
+        .tooltip-text { visibility: hidden; background-color: #1e293b; color: white; text-align: left; border-radius: 6px; padding: 8px 12px; position: absolute; z-index: 9999; top: 110%; left: 50%; transform: translateX(-50%); white-space: normal; font-size: 0.72rem; min-width: 200px; max-width: 280px; line-height: 1.5; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+        .tooltip-text::after { content: ""; position: absolute; bottom: 100%; left: 50%; margin-left: -5px; border-width: 5px; border-style: solid; border-color: transparent transparent #1e293b transparent; }
+        .tooltip-wrapper:hover .tooltip-text { visibility: visible; }
+        .expand-row { cursor: pointer; }
+        .expand-row:hover td { background-color: #fef2f2; }
+        .case-detail { background-color: #fff7ed; border-left: 4px solid #f97316; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+
+    // ===== 題目定義 =====
+    const QUESTION_DEFS = {
+        Q2:    { label: 'Q2',    full: 'Q2：銷售顧問是否了解需求並給予適時協助？' },
+        Q3_1:  { label: 'Q3.1',  full: 'Q3.1：來店賞車時，銷售顧問服務態度評分' },
+        Q3_2:  { label: 'Q3.2',  full: 'Q3.2：銷售顧問對車型/配備/價格說明評分' },
+        Q3_3:  { label: 'Q3.3',  full: 'Q3.3：銷售顧問對競品比較說明評分' },
+        Q3_4:  { label: 'Q3.4',  full: 'Q3.4：銷售顧問協助規劃購車方案評分' },
+        Q3_5:  { label: 'Q3.5',  full: 'Q3.5：整體賞車體驗評分' },
+        Q4_1:  { label: 'Q4.1',  full: 'Q4.1：訂車到交車期間，銷售顧問聯繫主動度' },
+        Q4_2:  { label: 'Q4.2',  full: 'Q4.2：交車日期與地點是否依約定執行？' },
+        Q5:    { label: 'Q5',    full: 'Q5：交車時，交車環境整潔舒適度評分' },
+        Q6_1:  { label: 'Q6.1',  full: 'Q6.1：交車時，銷售顧問服務態度評分' },
+        Q6_2:  { label: 'Q6.2',  full: 'Q6.2：交車說明完整度與清晰度評分' },
+        Q7:    { label: 'Q7',    full: 'Q7：交車前，車輛整潔與準備狀況評分' },
+        Q8_2:  { label: 'Q8.2',  full: 'Q8.2：銷售顧問是否說明車輛操作方式？' },
+        Q8_3:  { label: 'Q8.3',  full: 'Q8.3：銷售顧問是否說明保固/保養相關資訊？' },
+        Q8_4:  { label: 'Q8.4',  full: 'Q8.4：銷售顧問是否協助完成各項文件簽署？' },
+        Q9:    { label: 'Q9',    full: 'Q9：整體交車體驗滿意度評分（綜合）' },
+        Q10:   { label: 'Q10',   full: 'Q10：您是否願意推薦親友至本展示中心購車？' },
+        Q11_1: { label: 'Q11.1', full: 'Q11.1：請問您是透過哪個管道得知本展示中心？' },
+        Q12_1: { label: 'Q12.1', full: 'Q12.1：您本次購車前，是否有比較其他品牌或車款？' },
+        Q13:   { label: 'Q13',   full: 'Q13：整體而言，您對本次購車體驗的滿意度評分' },
+    };
+
+    // ===== 模擬資料生成 =====
+    const generateMockData = () => {
+        const dealers = [
+            { name: '銘勁汽車', score: 996.98, total: 42, rank: 1 },
+            { name: '茂豐',     score: 993.20, total: 31, rank: 2 },
+            { name: '榮佑',     score: 991.75, total: 28, rank: 3 },
+            { name: '豐展',     score: 990.40, total: 35, rank: 4 },
+            { name: '順怡',     score: 988.60, total: 27, rank: 5 },
+            { name: '東正',     score: 985.30, total: 33, rank: 6 },
+            { name: '億和',     score: 972.10, total: 19, rank: 7 },
+        ];
+
+        const plants = [
+            { name: '中壢營業所', score: 998.00, total: 17, passed: 15, lowCount: 2, rank: 1, dealer: '銘勁' },
+            { name: '桃園營業所', score: 997.75, total: 14, passed: 12, lowCount: 1, rank: 2, dealer: '銘勁' },
+            { name: '八德營業所', score: 995.21, total: 11, passed: 9,  lowCount: 3, rank: 3, dealer: '銘勁' },
+        ];
+
+        const orgStructure = {
+            '中壢營業所': {
+                所長: ['楊珈忻'],
+                課長: ['李詮瑋', '林祐生'],
+                '李詮瑋': ['宋美琳', '陳冠旻', '陳友正', '周呈儒', '邱玉華'],
+                '林祐生': ['邱垂傑', '余育誠', '李秋燕', '許曉琪', '曾健軒'],
+            },
+            '八德營業所': {
+                所長: ['林猷安'],
+                課長: ['孔秋萍', '林柏毅'],
+                '孔秋萍': ['林詩惟', '王淳安', '鄧霖駿'],
+                '林柏毅': ['陳昭翰', '陳奕瑜'],
+            },
+            '桃園營業所': {
+                所長: ['蕭凱升'],
+                課長: ['傅堃棋'],
+                '傅堃棋': ['高永霖', '李敬平', '劉臻', '王耀慶'],
+            },
+        };
+
+        const qKeys = Object.keys(QUESTION_DEFS);
+        const rnd = (min, max) => +(min + Math.random() * (max - min)).toFixed(1);
+
+        const salesByPlant = {};
+        for (const [plant, org] of Object.entries(orgStructure)) {
+            const allNames = [
+                ...(org.所長 || []),
+                ...(org.課長 || []),
+                ...Object.entries(org)
+                    .filter(([k]) => k !== '所長' && k !== '課長')
+                    .flatMap(([, v]) => v),
+            ];
+            const getRole = (name) => {
+                if (org.所長?.includes(name)) return '所長';
+                if (org.課長?.includes(name)) return '課長';
+                return '業代';
+            };
+            const getManager = (name) => {
+                for (const mgr of (org.課長 || [])) {
+                    if (org[mgr]?.includes(name)) return mgr;
+                }
+                return null;
+            };
+            const salespeople = allNames.map(name => {
+                const count = 2 + Math.floor(Math.random() * 8);
+                const scores = {};
+                qKeys.forEach(k => { scores[k] = rnd(8.5, 10.0); });
+                const jdp = +(Object.values(scores).reduce((a, b) => a + b, 0) / qKeys.length).toFixed(4);
+                return { name, role: getRole(name), manager: getManager(name), count, scores, jdp };
+            });
+            salesByPlant[plant] = { name: plant, salespeople };
+        }
+
+        // 低分案件 JDP < 950
+        const lowScoreCases = [
+            { 客戶姓名: '王○明', 銷售顧問: '余育誠', 營業所: '中壢營業所', 交車日期: '2026-03-05', 車牌: 'AAA-0001', JDP: 9.12, Q89: '有', Q89p: '車內有輕微異味', Q17: '希望交車前能再清潔一次', scores: { Q2:7,Q3_1:9,Q3_2:8,Q3_3:9,Q3_4:8,Q3_5:8,Q4_1:9,Q4_2:9,Q5:7,Q6_1:9,Q6_2:9,Q7:7,Q8_2:9,Q8_3:9,Q8_4:9,Q9:8,Q10:8,Q11_1:8,Q12_1:8,Q13:8 } },
+            { 客戶姓名: '李○華', 銷售顧問: '陳奕瑜', 營業所: '八德營業所', 交車日期: '2026-03-12', 車牌: 'BBB-0002', JDP: 8.87, Q89: '有', Q89p: '說明不夠清楚', Q17: '銷售顧問對車輛功能了解不夠深入', scores: { Q2:8,Q3_1:7,Q3_2:7,Q3_3:8,Q3_4:8,Q3_5:7,Q4_1:8,Q4_2:9,Q5:9,Q6_1:8,Q6_2:7,Q7:9,Q8_2:7,Q8_3:7,Q8_4:9,Q9:7,Q10:7,Q11_1:7,Q12_1:7,Q13:7 } },
+            { 客戶姓名: '張○芳', 銷售顧問: '鄧霖駿', 營業所: '八德營業所', 交車日期: '2026-03-18', 車牌: 'CCC-0003', JDP: 9.03, Q89: '否', Q89p: '', Q17: '等待時間稍長，希望改善交車流程', scores: { Q2:9,Q3_1:9,Q3_2:8,Q3_3:9,Q3_4:8,Q3_5:9,Q4_1:7,Q4_2:8,Q5:8,Q6_1:9,Q6_2:8,Q7:9,Q8_2:9,Q8_3:8,Q8_4:9,Q9:8,Q10:8,Q11_1:8,Q12_1:8,Q13:8 } },
+            { 客戶姓名: '陳○志', 銷售顧問: '邱垂傑', 營業所: '中壢營業所', 交車日期: '2026-03-22', 車牌: 'DDD-0004', JDP: 9.31, Q89: '有', Q89p: '前擋風玻璃有細微刮痕', Q17: '交車時發現車窗有問題，需再改善', scores: { Q2:9,Q3_1:9,Q3_2:9,Q3_3:8,Q3_4:9,Q3_5:9,Q4_1:9,Q4_2:9,Q5:9,Q6_1:9,Q6_2:9,Q7:7,Q8_2:9,Q8_3:9,Q8_4:9,Q9:9,Q10:9,Q11_1:9,Q12_1:9,Q13:9 } },
+            { 客戶姓名: '林○雯', 銷售顧問: '高永霖', 營業所: '桃園營業所', 交車日期: '2026-03-25', 車牌: 'EEE-0005', JDP: 9.45, Q89: '否', Q89p: '', Q17: '整體尚可，期待售後服務更完善', scores: { Q2:9,Q3_1:9,Q3_2:9,Q3_3:9,Q3_4:8,Q3_5:9,Q4_1:9,Q4_2:9,Q5:9,Q6_1:9,Q6_2:9,Q7:9,Q8_2:9,Q8_3:9,Q8_4:9,Q9:8,Q10:8,Q11_1:8,Q12_1:8,Q13:8 } },
+        ];
+
+        const scoreDistribution = { s1000: 8, s980: 14, s960: 12, s900: 5, below900: 3 };
+
+        return { dealers, plants, salesByPlant, lowScoreCases, scoreDistribution,
+            fileName: '模擬資料展示', lastUpdated: new Date().toLocaleString('zh-TW') };
+    };
+
+    // ===== 上傳解析 =====
+    // 各經銷商成績：
+    //   列5(index4)=全國總, 列6-12(index5-11)=7家經銷商, 列13-15(index12-14)=銘勁3個營業所
+    //   欄C(index2)=名稱, 欄D(index3)=區域/總件數, 欄E(index4)=據點, 欄F(index5)=件數, 欄I(index8)=JDP×100
+    const parseDealerData = (jsonData) => {
+        const dealers = [];
+        const plants = [];
+
+        // index 5-11 → 7家經銷商（欄C=名稱含括號, 欄F=件數, 欄H=JDP分數(權重), 欄I=同分tiebreaker）
+        for (let i = 5; i <= 11; i++) {
+            const row = jsonData[i];
+            if (!row) continue;
+            const raw = row[2]?.toString().trim() || '';
+            const name = raw.replace(/\s*\(.*\)/, '').trim();
+            const total = parseInt(row[5]) || 0;
+            const score = parseFloat(row[7]);                     // 欄H = JDP滿意度分數(權重)
+            const scoreX100 = parseFloat(row[8]);                 // 欄I = tiebreaker
+            if (!name || isNaN(score)) continue;
+            dealers.push({ name, score, scoreX100, total, rank: 0 });
+        }
+
+        // index 12-14 → 銘勁3個營業所（欄E=據點名稱, 欄F=件數, 欄H=JDP分數(權重), 欄I=tiebreaker）
+        for (let i = 12; i <= 14; i++) {
+            const row = jsonData[i];
+            if (!row) continue;
+            const name = row[4]?.toString().trim() || '';
+            const total = parseInt(row[5]) || 0;
+            const score = parseFloat(row[7]);                     // 欄H = JDP滿意度分數(權重)
+            const scoreX100 = parseFloat(row[8]);                 // 欄I = tiebreaker
+            if (!name || isNaN(score)) continue;
+            plants.push({ name, score, scoreX100, total, passed: Math.round(total * 0.88), lowCount: 0, rank: 0, dealer: '銘勁' });
+        }
+
+        // 排序：先比欄H，同分再比欄I（降冪）
+        const cmp = (a, b) => b.score - a.score || (b.scoreX100 || 0) - (a.scoreX100 || 0);
+        dealers.sort(cmp);
+        dealers.forEach((d, i) => d.rank = i + 1);
+        plants.sort(cmp);
+        plants.forEach((p, i) => p.rank = i + 1);
+        return { dealers, plants };
+    };
+
+    // 油車&電車-分數：
+    //   第1列=標題, 第2-4列=空, 第5列起=資料
+    //   index3=填寫狀態, index7=客戶姓名, index8=經銷商別('M'), index11=營業所名稱
+    //   index12=實際交車日, index18=銷售顧問, index22=車牌
+    //   分數欄：Q2=30, Q3.1=31, Q3.2=32, Q3.3=33, Q3.4=34, Q3.5=35,
+    //           Q4.1=36, Q4.2=37, Q5=38, Q6.1=39, Q6.2=40, Q7=41,
+    //           Q8.2=42, Q8.3=43, Q8.4=44, 跳過index45(無此題/Q8.5),
+    //           Q9=50, Q10=51, Q11.1=52, Q12.1=53(跳Q11.2), Q13=56
+    //   JDP×100=index59
+    // 油車-報表（原始問卷）：Q8.9=index55, Q8.9+=index56, Q17=index70
+    const parseDetailData = (scoreJsonData, rawJsonData) => {
+        const salesStats = {};
+        const lowScoreCases = [];
+        const scoreDistribution = { s1000: 0, s980: 0, s960: 0, s900: 0, below900: 0 };
+        // 對應 QUESTION_DEFS 的 19 個 key，依序對應欄位 index
+        const qCols = [30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,50,51,52,53,54,55,56]; // Q2~Q8.4, Q9~Q13
+        const qKeys = Object.keys(QUESTION_DEFS);
+
+        // 建立 SurveyKey → 原始問卷意見的 map
+        const rawMap = {};
+        if (rawJsonData) {
+            for (let i = 4; i < rawJsonData.length; i++) {
+                const row = rawJsonData[i];
+                if (!row || row[3] !== '已完成' || row[8] !== 'M') continue;
+                const key = row[0]?.toString() || '';
+                if (key) rawMap[key] = {
+                    Q89:  row[55]?.toString() || '',
+                    Q89p: row[56]?.toString() || '',
+                    Q17:  row[70]?.toString() || '',
+                };
+            }
+        }
+
+        for (let i = 4; i < scoreJsonData.length; i++) {
+            const row = scoreJsonData[i];
+            if (!row || row.length < 55) continue;
+            if (row[3] !== '已完成' || row[8] !== 'M') continue;
+            const surveyKey  = row[0]?.toString() || '';
+            const 客戶姓名  = row[7]?.toString() || '';
+            const 營業所    = (row[11]?.toString() || '').trim();
+            const 銷售顧問  = (row[18]?.toString() || '').replace(/\s+/g, '').trim();
+            const 交車日期  = row[12]?.toString() || '';
+            const 車牌      = row[22]?.toString() || '';
+            const JDP       = parseFloat(row[58]);  // BG欄 = JDP滿意度分數(權重)
+            if (!銷售顧問 || !營業所 || isNaN(JDP)) continue;
+
+            const raw = rawMap[surveyKey] || { Q89: '', Q89p: '', Q17: '' };
+
+            const scores = {};
+            qCols.forEach((col, idx) => {
+                const v = parseFloat(row[col]);
+                scores[qKeys[idx]] = isNaN(v) ? null : v;
+            });
+
+            const key = `${營業所}__${銷售顧問}`;
+            if (!salesStats[key]) {
+                salesStats[key] = { name: 銷售顧問, plant: 營業所, count: 0, scoreSums: {}, scoreCounts: {}, jdpScores: [] };
+                qKeys.forEach(k => { salesStats[key].scoreSums[k] = 0; salesStats[key].scoreCounts[k] = 0; });
+            }
+            salesStats[key].count++;
+            salesStats[key].jdpScores.push(JDP);
+            qKeys.forEach(k => {
+                if (scores[k] !== null) {
+                    salesStats[key].scoreSums[k] += scores[k];
+                    salesStats[key].scoreCounts[k]++;
+                }
+            });
+
+            if (JDP < 9.5) {
+                lowScoreCases.push({ 客戶姓名, 銷售顧問, 營業所, 交車日期, 車牌, JDP,
+                    Q89: raw.Q89, Q89p: raw.Q89p, Q17: raw.Q17, scores });
+            }
+
+            if (JDP >= 1000) scoreDistribution.s1000++;
+            else if (JDP >= 980) scoreDistribution.s980++;
+            else if (JDP >= 960) scoreDistribution.s960++;
+            else if (JDP >= 900) scoreDistribution.s900++;
+            else scoreDistribution.below900++;
+        }
+
+        const orgStructure = {
+            '中壢營業所': { 所長: ['楊珈忻'], 課長: ['李詮瑋','林祐生'], '李詮瑋': ['宋美琳','陳冠旻','陳友正','周呈儒','邱玉華'], '林祐生': ['邱垂傑','余育誠','李秋燕','許曉琪','曾健軒'] },
+            '八德營業所': { 所長: ['林猷安'], 課長: ['孔秋萍','林柏毅'], '孔秋萍': ['林詩惟','王淳安','鄧霖駿'], '林柏毅': ['陳昭翰','陳奕瑜'] },
+            '桃園營業所': { 所長: ['蕭凱升'], 課長: ['傅堃棋'], '傅堃棋': ['高永霖','李敬平','劉臻','王耀慶'] },
+        };
+
+        const getRole = (plant, name) => {
+            const org = orgStructure[plant];
+            if (!org) return '業代';
+            if (org.所長?.includes(name)) return '所長';
+            if (org.課長?.includes(name)) return '課長';
+            return '業代';
+        };
+
+        const salesByPlant = {};
+        for (const [key, s] of Object.entries(salesStats)) {
+            const plant = s.plant;
+            if (!salesByPlant[plant]) salesByPlant[plant] = { name: plant, salespeople: [] };
+            const avgScores = {};
+            Object.keys(QUESTION_DEFS).forEach(k => {
+                avgScores[k] = s.scoreCounts[k] > 0 ? +(s.scoreSums[k] / s.scoreCounts[k]).toFixed(2) : null;
+            });
+            const jdp = s.jdpScores.length > 0 ? s.jdpScores.reduce((a,b)=>a+b,0) / s.jdpScores.length : 0;
+            salesByPlant[plant].salespeople.push({
+                name: s.name, role: getRole(plant, s.name), count: s.count, scores: avgScores, jdp: +jdp.toFixed(4)
+            });
+        }
+
+        // 排序每個営業所
+        for (const plant of Object.keys(salesByPlant)) {
+            const org = orgStructure[plant] || {};
+            const list = salesByPlant[plant].salespeople;
+            const sorted = [];
+            for (const n of (org.所長||[])) { const p = list.find(x=>x.name===n); if(p) sorted.push(p); }
+            for (const mgr of (org.課長||[])) {
+                const p = list.find(x=>x.name===mgr); if(p) sorted.push(p);
+                for (const n of (org[mgr]||[])) { const p2 = list.find(x=>x.name===n); if(p2) sorted.push(p2); }
+            }
+            for (const p of list) { if (!sorted.find(x=>x.name===p.name)) sorted.push(p); }
+            salesByPlant[plant].salespeople = sorted;
+        }
+
+        lowScoreCases.sort((a,b) => a.JDP - b.JDP);
+        return { salesByPlant, lowScoreCases, scoreDistribution };
+    };
+
+    // ===== Tooltip 組件 =====
+    function Tip({ qKey, children }) {
+        const def = QUESTION_DEFS[qKey];
+        if (!def) return <th>{children}</th>;
+        return (
+            <th>
+                <div className="tooltip-wrapper">
+                    <span style={{cursor:'help', borderBottom:'1px dashed #94a3b8'}}>{children}</span>
+                    <span className="tooltip-text">{def.full}</span>
+                </div>
+            </th>
+        );
+    }
+
+    // ===== 主 App =====
+    function App() {
+        const [data, setData] = React.useState(null);
+        const [selectedView, setSelectedView] = React.useState('全廠區');
+        const [showUpload, setShowUpload] = React.useState(false);
+        const [uploadStatus, setUploadStatus] = React.useState('');
+        const [isUploading, setIsUploading] = React.useState(false);
+        const [errorMsg, setErrorMsg] = React.useState('');
+        const [expandedCase, setExpandedCase] = React.useState(null);
+
+        const [storageStatus, setStorageStatus] = React.useState('');
+
+        React.useEffect(() => {
+            try {
+                const saved = localStorage.getItem('ssi_sales_data');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed && parsed.dealers) {
+                        setData(parsed);
+                        setStorageStatus('loaded');
+                        setTimeout(() => setStorageStatus(''), 3000);
+                        return;
+                    }
+                }
+            } catch(e) {}
+            setData(generateMockData());
+        }, []);
+
+        const handleUpload = (file) => {
+            if (!file) return;
+            setIsUploading(true);
+            setUploadStatus('📊 正在解析 SSI 資料...');
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const wb = XLSX.read(e.target.result, { type: 'array' });
+                    if (!wb.Sheets['各經銷商成績']) throw new Error('找不到「各經銷商成績」工作表');
+                    if (!wb.Sheets['油車&電車-分數']) throw new Error('找不到「油車&電車-分數」工作表');
+                    const dealerSheet = XLSX.utils.sheet_to_json(wb.Sheets['各經銷商成績'], { header: 1 });
+                    const scoreSheet = XLSX.utils.sheet_to_json(wb.Sheets['油車&電車-分數'], { header: 1 });
+                    const rawSheet = wb.Sheets['油車-報表'] ? XLSX.utils.sheet_to_json(wb.Sheets['油車-報表'], { header: 1 }) : null;
+                    const { dealers, plants } = parseDealerData(dealerSheet);
+                    const { salesByPlant, lowScoreCases, scoreDistribution } = parseDetailData(scoreSheet, rawSheet);
+                    const now = new Date();
+                    const nowStr = now.getFullYear() + '/' + String(now.getMonth()+1).padStart(2,'0') + '/' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+                    const newData = { dealers, plants, salesByPlant, lowScoreCases, scoreDistribution, fileName: file.name, lastUpdated: nowStr };
+                    setStorageStatus('saving');
+                    localStorage.setItem('ssi_sales_data', JSON.stringify(newData));
+                    // 匯報寫入
+                    try {
+                        const nowD = new Date();
+                        const yr = nowD.getFullYear().toString();
+                        const mo = String(nowD.getMonth()+1).padStart(2,'0');
+                        const mjDealer = dealers?.find(d => d.name === '銘勁' || d.name === '銘勁汽車');
+                        const mjRank = dealers?.findIndex(d => d.name === '銘勁' || d.name === '銘勁汽車') + 1;
+                        const mgtDealer = dealers?.find(d => d.code === 'MGT' || d.name === '總代理');
+                        localStorage.setItem(`mj_ssi_${yr}_${mo}`, JSON.stringify({
+                            year: yr, month: mo,
+                            jdp: mjDealer?.score ?? null,
+                            mgt: mgtDealer?.score ?? null,
+                            rank: mjRank || null,
+                            totalDealers: dealers?.length ?? null,
+                            sampleCount: mjDealer?.total ?? null,
+                            lowScoreCount: lowScoreCases?.length ?? 0,
+                            scoreDistribution,
+                            plantScores: plants?.filter(p=>p.dealer==='銘勁').map(p=>({name:p.name,score:p.score})) ?? [],
+                            updatedAt: new Date().toISOString()
+                        }));
+                    } catch(e) { console.error('SSI 匯報寫入失敗', e); }
+                    setData(newData);
+                    setStorageStatus('saved');
+                    setUploadStatus(`✅ 成功載入 ${dealers.length} 家經銷商、${plants.length} 個營業所`);
+                    setIsUploading(false);
+                    setTimeout(() => { setUploadStatus(''); setShowUpload(false); setStorageStatus(''); }, 2500);
+                } catch(err) {
+                    setUploadStatus('❌ ' + err.message);
+                    setIsUploading(false);
+                    setStorageStatus('');
+                }
+            };
+            reader.onerror = () => { setUploadStatus('❌ 檔案讀取失敗'); setIsUploading(false); };
+            reader.readAsArrayBuffer(file);
+        };
+
+        if (!data) return <div className="flex items-center justify-center min-h-screen text-slate-500">載入中...</div>;
+
+        const isMock = data.fileName === '模擬資料展示';
+        const mingJin = data.dealers?.find(d => d.name === '銘勁' || d.name === '銘勁汽車');
+        const mingJinRank = data.dealers?.findIndex(d => d.name === '銘勁' || d.name === '銘勁汽車') + 1;
+        const others = data.dealers?.filter(d => d.name !== '銘勁' && d.name !== '銘勁汽車') || [];
+
+        return (
+            <div style={{minHeight:"100vh",background:"#f3f4f6"}}>
+                {/* Error Banner */}
+                {errorMsg && (
+                    <div className="bg-red-50 border-b border-red-200 px-4 py-2 flex justify-between items-center">
+                        <span className="text-red-700 text-sm">{errorMsg}</span>
+                        <button onClick={() => setErrorMsg('')} className="text-red-500 font-bold ml-4">✕</button>
+                    </div>
+                )}
+                {/* Mock Banner */}
+                {isMock && (
+                    <div className="bg-amber-50 border-b-2 border-amber-300 px-4 py-2 text-center">
+                        <span className="text-amber-700 text-sm font-semibold">⚠️ 目前顯示模擬資料，請點擊「☁️ 雲端資料更新」上傳 Excel 以載入真實資料</span>
+                    </div>
+                )}
+
+                {/* Header */}
+                <div className="page-header">
+                    <div className="breadcrumb">顧關部 / SSI 交車滿意度</div>
+                    <div className="title-row">
+                        <div className="red-accent"></div>
+                        <div>
+                            <h1>SSI 交車滿意度</h1>
+                            <div className="subtitle">銘勁汽車 · 交車滿意度追蹤系統</div>
+                        </div>
+                    </div>
+                    <div className="toolbar">
+                        {/* SP 同步用年月選擇 */}
+                        <select id="ssi-sp-year" style={{fontSize:'12px',padding:'4px 8px',borderRadius:'6px',border:'1px solid #e5e7eb',background:'#f9fafb',color:'#374151',fontFamily:'inherit'}}>
+                            {[2026,2025].map(y=><option key={y} value={y}>{y}年</option>)}
+                        </select>
+                        <select id="ssi-sp-month" style={{fontSize:'12px',padding:'4px 8px',borderRadius:'6px',border:'1px solid #e5e7eb',background:'#f9fafb',color:'#374151',fontFamily:'inherit'}}>
+                            {Array.from({length:12},(_,i)=>i+1).map(m=><option key={m} value={String(m).padStart(2,'0')} selected={m===new Date().getMonth()+1}>{m}月</option>)}
+                        </select>
+                        <button className="action-btn" style={{borderColor:'#6ee7b7',background:'#f0fdf4',color:'#065f46'}} onClick={async()=>{
+                            const y=document.getElementById('ssi-sp-year').value;
+                            const m=document.getElementById('ssi-sp-month').value;
+                            setStorageStatus('saving');
+                            try{
+                                const spUrl=`https://fetcb107004.sharepoint.com/sites/customer-/Shared%20Documents/AI%E6%93%B7%E5%8F%96%E8%B3%87%E6%96%99/%E9%A1%A7%E5%AE%A2%E6%BB%BF%E6%84%8F/%E7%87%9F%E6%A5%AD%E9%83%A8SSI%E6%BB%BF%E6%84%8F%E5%BA%A6/SSI%E4%BA%A4%E8%BB%8A%E5%95%8F%E5%8D%B7/MG-SSI-%E6%9C%88%E5%A0%B1-${y}${m}_%E9%8A%98%E5%8B%81.xlsx`;
+                                const res=await fetch(spUrl,{credentials:'include'});
+                                if(res.status===401||res.status===403)throw new Error('請先登入 O365（office.com）再重試');
+                                if(res.status===404)throw new Error(`找不到 ${y}年${m}月 的 SSI 月報，請確認 SharePoint 已放置`);
+                                if(!res.ok)throw new Error('HTTP '+res.status);
+                                const buf=await res.arrayBuffer();
+                                const file=new File([buf],`MG-SSI-月報-${y}${m}_銘勁.xlsx`);
+                                handleUpload(file);
+                            }catch(e){setStorageStatus('error');alert('SharePoint 同步失敗：'+e.message);setTimeout(()=>setStorageStatus(''),4000);}
+                        }}>🔗 SharePoint 同步</button>
+                        {data.fileName && !isMock && (
+                            <span style={{fontSize:'11px',padding:'3px 8px',borderRadius:'5px',background:'#fef2f2',border:'1px solid #fecaca',color:'#991b1b'}}>
+                                📄 {data.fileName}
+                            </span>
+                        )}
+                        {data.lastUpdated && !isMock && (
+                            <span style={{fontSize:'11px',color:'#9ca3af'}}>更新：{data.lastUpdated}</span>
+                        )}
+                        {storageStatus === 'saving' && <span style={{fontSize:'11px',color:'#6b7280',background:'#f9fafb',border:'1px solid #e5e7eb',padding:'3px 8px',borderRadius:'5px'}}>💾 儲存中...</span>}
+                        {storageStatus === 'saved' && <span style={{fontSize:'11px',color:'#15803d',background:'#f0fdf4',border:'1px solid #bbf7d0',padding:'3px 8px',borderRadius:'5px'}}>✅ 已儲存</span>}
+                        {storageStatus === 'loaded' && <span style={{fontSize:'11px',color:'#1d4ed8',background:'#eff6ff',border:'1px solid #bfdbfe',padding:'3px 8px',borderRadius:'5px'}}>☁️ 已載入雲端資料</span>}
+                        <button className="action-btn danger" onClick={() => {
+                            if(confirm('確定清除所有儲存資料？')) {
+                                localStorage.removeItem('ssi_sales_data');
+                                location.reload();
+                            }
+                        }}>
+                            🗑️ 清除資料
+                        </button>
+                        <button className="action-btn" onClick={() => { setShowUpload(true); setUploadStatus(''); }}>
+                            📤 手動上傳
+                        </button>
+                    </div>
+                </div>
+
+                {/* Main */}
+                <main style={{maxWidth:"1400px",margin:"0 auto",padding:"24px"}} className="space-y-6">
+
+                            {/* 經銷商排名 */}
+                            <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",marginBottom:"14px",paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>各經銷商排名</h2>
+                                <div className="flex gap-5">
+                                    {/* 銘勁大卡 */}
+                                    {mingJin && (
+                                        <div style={{width:"33%",flexShrink:0,border:"1px solid #fca5a5",borderRadius:"12px",padding:"16px",background:"#fff9f9"}}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <h3 className="text-xl font-black text-red-700">#{mingJinRank} 銘勁</h3>
+                                                
+                                            </div>
+                                            <div className="text-4xl font-black text-red-600 mb-1">{mingJin.score.toFixed(2)}</div>
+                                            <div className="text-xs text-slate-500 mb-4">總份數 {mingJin.total} 件</div>
+                                            <table className="w-full text-sm">
+                                                <thead><tr className="bg-red-100"><th className="px-2 py-1 text-left text-xs">營業所</th><th className="px-2 py-1 text-center text-xs">分數</th><th className="px-2 py-1 text-center text-xs">排名</th></tr></thead>
+                                                <tbody>
+                                                    {[...(data.plants||[])].sort((a,b)=>a.rank-b.rank).map((p, i) => (
+                                                        <tr key={p.name} className="border-t border-red-100">
+                                                            <td className="px-2 py-2 font-semibold">{p.name}</td>
+                                                            <td className="px-2 py-2 text-center text-lg font-bold text-red-600">{p.score.toFixed(2)}</td>
+                                                            <td className="px-2 py-2 text-center text-slate-500 text-sm">#{p.rank}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                    {/* 其他6家 3×2 */}
+                                    <div className="flex-1 grid grid-cols-3 gap-3 content-start">
+                                        {others.map((d) => {
+                                            const rankEmojis = ['','','','','','','',''];
+                                            return (
+                                                <div key={d.name} className="border border-slate-200 rounded-lg p-3 bg-white">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className="font-bold text-slate-700 text-sm">#{d.rank} {d.name}</span>
+                                                        
+                                                    </div>
+                                                    <div className="text-2xl font-black text-slate-700">{d.score.toFixed(2)}</div>
+                                                    <div className="text-xs text-slate-400 mt-1">{d.total} 件</div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 營業所成績卡 */}
+                            <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",marginBottom:"14px",paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>銘勁各營業所成績</h2>
+                                <div className="grid grid-cols-3 gap-4">
+                                    {[...(data.plants||[])].sort((a,b)=>a.rank-b.rank).map((p, i) => {
+                                        const medals = ['🥇','🥈','🥉'];
+                                        const isOk = p.score >= 9.6;
+                                        return (
+                                            <div key={p.name} className="border-2 border-slate-200 rounded-xl overflow-hidden">
+                                                <div className={`px-4 py-3 flex items-center justify-between ${isOk ? 'bg-green-50' : 'bg-orange-50'}`}>
+                                                    <h3 className="font-bold text-slate-800">{p.name}</h3>
+                                                    
+                                                </div>
+                                                <div className="p-4">
+                                                    <div className={`text-3xl font-black mb-1 ${isOk ? 'text-green-600' : 'text-orange-500'}`}>{p.score.toFixed(2)}</div>
+                                                    <div className="text-xs text-slate-400 mb-3">全國第 {p.rank} 名</div>
+                                                    <div className="space-y-1 text-sm">
+                                                        <div className="flex justify-between"><span className="text-slate-500">總份數</span><span className="font-bold">{p.total} 件</span></div>
+                                                        <div className="flex justify-between"><span className="text-slate-500">達標件數</span><span className="font-bold text-green-600">{p.passed} 件</span></div>
+                                                        <div className="flex justify-between"><span className="text-slate-500">低分案件</span><span className={`font-bold ${p.lowCount > 0 ? 'text-red-600' : 'text-green-600'}`}>{p.lowCount} 件</span></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* 智能分析 */}
+                            <SmartInsights data={data} />
+
+                            {/* 銷售顧問明細 */}
+                            <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>SSI 銷售顧問明細表</h2>
+                                    <select value={selectedView} onChange={e => setSelectedView(e.target.value)}
+                                        className="border-2 border-red-300 rounded-lg px-3 py-1.5 text-sm font-bold text-red-700 bg-red-50 focus:outline-none">
+                                        <option value="全廠區">全部營業所</option>
+                                        <option value="中壢營業所">中壢營業所</option>
+                                        <option value="八德營業所">八德營業所</option>
+                                        <option value="桃園營業所">桃園營業所</option>
+                                    </select>
+                                </div>
+                                <DetailTable salesByPlant={data.salesByPlant} selectedView={selectedView} />
+                            </div>
+
+                            {/* 低分案件 */}
+                            <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",marginBottom:"4px",paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>低分案件檢討 <span className="text-sm font-normal text-slate-500">（JDP &lt; 9.5）</span></h2>
+                                <p className="text-xs text-slate-500 mb-4">共 {data.lowScoreCases?.length || 0} 件，點擊展開查看詳情</p>
+                                <LowScoreTable cases={data.lowScoreCases} expandedCase={expandedCase} setExpandedCase={setExpandedCase} />
+                            </div>
+
+                </main>
+
+                {/* Upload Modal */}
+                {showUpload && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+                            <div className="bg-gradient-to-r from-red-700 to-red-900 text-white px-6 py-4 rounded-t-2xl">
+                                <h2 className="text-xl font-bold">📤 SSI 資料上傳</h2>
+                            </div>
+                            <div className="p-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">SSI 交車滿意度月報（.xlsx）</label>
+                                    <input type="file" accept=".xlsx,.xls" onChange={e => handleUpload(e.target.files[0])} disabled={isUploading}
+                                        className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:border-red-500 text-sm"/>
+                                    <p className="text-xs text-slate-500 mt-1">需包含「各經銷商成績」和「油車&電車-分數」兩個工作表</p>
+                                </div>
+                                {uploadStatus && (
+                                    <div className={`p-3 rounded-lg text-sm font-medium ${uploadStatus.includes('✅') ? 'bg-green-50 text-green-800' : uploadStatus.includes('❌') ? 'bg-red-50 text-red-800' : 'bg-blue-50 text-blue-800'}`}>
+                                        {uploadStatus}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="px-6 py-4 bg-slate-50 rounded-b-2xl flex justify-end">
+                                <button onClick={() => setShowUpload(false)} disabled={isUploading} className="px-5 py-2 bg-slate-600 hover:bg-slate-700 text-white font-bold rounded-lg text-sm">關閉</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // ===== KPI Bar =====
+    // ===== 分數分布 =====
+    function ScoreDistribution({ dist }) {
+        if (!dist) return null;
+        const total = Object.values(dist).reduce((a,b)=>a+b,0);
+        const bars = [
+            { label: '1000分', count: dist.s1000, color: 'bg-green-500' },
+            { label: '980-999', count: dist.s980, color: 'bg-teal-400' },
+            { label: '960-979', count: dist.s960, color: 'bg-blue-400' },
+            { label: '900-959', count: dist.s900, color: 'bg-orange-400' },
+            { label: '< 900',  count: dist.below900, color: 'bg-red-500' },
+        ];
+        return (
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+                <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",marginBottom:"14px",paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>分數分布</h2>
+                <div className="flex gap-3 items-end h-36">
+                    {bars.map(b => {
+                        const pct = total > 0 ? (b.count / total) * 100 : 0;
+                        return (
+                            <div key={b.label} className="flex-1 flex flex-col items-center gap-1">
+                                <span className="text-xs font-bold text-slate-600">{b.count}</span>
+                                <div className={`w-full rounded-t-md ${b.color} transition-all`} style={{height: `${Math.max(pct * 1.2, b.count>0?8:0)}px`}}></div>
+                                <span className="text-xs text-slate-500 text-center leading-tight">{b.label}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+                <p className="text-xs text-slate-400 mt-2 text-center">總計 {total} 份</p>
+            </div>
+        );
+    }
+
+    // ===== 銷售顧問明細表 =====
+    function DetailTable({ salesByPlant, selectedView }) {
+        if (!salesByPlant || Object.keys(salesByPlant).length === 0) {
+            return <div className="text-center py-12 text-slate-400">📊 尚無明細資料，請上傳 Excel 檔案</div>;
+        }
+        const qKeys = Object.keys(QUESTION_DEFS);
+        const plantsToShow = selectedView === '全廠區'
+            ? Object.entries(salesByPlant)
+            : Object.entries(salesByPlant).filter(([n]) => n === selectedView);
+
+        return (
+            <div className="overflow-x-auto">
+                <table className="detail-table">
+                    <thead>
+                        <tr>
+                            <th className="sticky-name">姓名</th>
+                            <th className="sticky-role">職級</th>
+                            {qKeys.map(k => (
+                                <th key={k}>
+                                    <div className="tooltip-wrapper">
+                                        <span style={{cursor:'help', borderBottom:'1px dashed #94a3b8'}}>{QUESTION_DEFS[k].label}</span>
+                                        <span className="tooltip-text">{QUESTION_DEFS[k].full}</span>
+                                    </div>
+                                </th>
+                            ))}
+                            <th>JDP平均</th>
+                            <th>件數</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {plantsToShow.map(([plantName, plantData]) => {
+                            const salespeople = plantData.salespeople || [];
+                            const subtotals = {};
+                            qKeys.forEach(k => {
+                                const vals = salespeople.map(p => p.scores[k]).filter(v => v !== null && v !== undefined);
+                                subtotals[k] = vals.length > 0 ? (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2) : '-';
+                            });
+                            const totalCases = salespeople.reduce((s,p)=>s+p.count,0);
+                            const avgJdp = salespeople.length > 0 ? (salespeople.reduce((s,p)=>s+p.jdp,0)/salespeople.length).toFixed(4) : '-';
+
+                            return (
+                                <React.Fragment key={plantName}>
+                                    <tr className="plant-header-row">
+                                        <td colSpan={qKeys.length + 4} className="px-3 py-2">▶ {plantName}</td>
+                                    </tr>
+                                    {salespeople.map((person, idx) => {
+                                        const roleColor = person.role === '所長' ? 'bg-red-50 text-red-700' : person.role === '課長' ? 'bg-blue-50 text-blue-700' : '';
+                                        return (
+                                            <tr key={idx} className={roleColor ? roleColor : (idx % 2 === 0 ? '' : 'bg-slate-50')}>
+                                                <td className={`sticky-name font-medium text-left pl-3 ${roleColor}`}>{person.name}</td>
+                                                <td className={`sticky-role text-xs ${roleColor}`}>{person.role}</td>
+                                                {qKeys.map(k => {
+                                                    const v = person.scores[k];
+                                                    const isLow = v !== null && v !== undefined && v < 8;
+                                                    return <td key={k} className={isLow ? 'low-score' : ''}>{v !== null && v !== undefined ? v : '-'}</td>;
+                                                })}
+                                                <td className={`font-bold ${person.jdp < 9.5 ? 'low-score' : 'text-slate-800'}`}>{person.jdp}</td>
+                                                <td>{person.count}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                    <tr className="subtotal-row">
+                                        <td className="sticky-name text-center font-bold" style={{background:'#fef3c7'}}>所別小計</td>
+                                        <td className="sticky-role" style={{background:'#fef3c7'}}></td>
+                                        {qKeys.map(k => <td key={k}>{subtotals[k]}</td>)}
+                                        <td className="font-bold">{avgJdp}</td>
+                                        <td className="font-bold">{totalCases}</td>
+                                    </tr>
+                                </React.Fragment>
+                            );
+                        })}
+                    </tbody>
+                </table>
+                <div className="mt-4 p-3 bg-blue-50 border-l-4 border-blue-400 rounded text-xs text-blue-800">
+                    <strong>📝 說明：</strong>各題為 1-10 分評分，JDP 平均 = 各題加權平均 × 100，低於 8 分以紅色標示。滑鼠移至題號可查看完整題目。
+                </div>
+            </div>
+        );
+    }
+
+    // ===== 低分案件表 =====
+    function LowScoreTable({ cases, expandedCase, setExpandedCase }) {
+        if (!cases || cases.length === 0) {
+            return <div className="text-center py-12 text-green-600 font-bold text-lg">🎉 本月無低分案件！表現優異</div>;
+        }
+        const qKeys = Object.keys(QUESTION_DEFS);
+
+        return (
+            <div className="overflow-x-auto">
+                <table className="detail-table">
+                    <thead>
+                        <tr>
+                            <th>客戶姓名</th>
+                            <th>營業所</th>
+                            <th>銷售顧問</th>
+                            <th>交車日期</th>
+                            <th>車牌</th>
+                            <th>JDP分數</th>
+                            <th>發現問題</th>
+                            <th>展開</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {cases.map((c, i) => (
+                            <React.Fragment key={i}>
+                                <tr className="expand-row" onClick={() => setExpandedCase(expandedCase === i ? null : i)}>
+                                    <td className="font-medium">{c.客戶姓名}</td>
+                                    <td>{c.營業所}</td>
+                                    <td className="font-semibold">{c.銷售顧問}</td>
+                                    <td>{c.交車日期}</td>
+                                    <td className="text-xs text-slate-500">{c.車牌}</td>
+                                    <td className="low-score text-lg">{c.JDP}</td>
+                                    <td>{c.Q89 === '有' ? <span className="text-red-600 font-bold">⚠️ 有</span> : <span className="text-green-600">✓ 無</span>}</td>
+                                    <td><span className="text-blue-500 text-xs font-bold cursor-pointer">{expandedCase === i ? '▲ 收起' : '▼ 展開'}</span></td>
+                                </tr>
+                                {expandedCase === i && (
+                                    <tr className="case-detail">
+                                        <td colSpan="8" className="p-4">
+                                            <div className="grid grid-cols-2 gap-4 mb-4">
+                                                {c.Q89p && (
+                                                    <div className="bg-red-50 p-3 rounded-lg">
+                                                        <div className="text-xs font-bold text-red-700 mb-1">⚠️ Q8.9+ 問題詳述</div>
+                                                        <div className="text-sm text-red-800">{c.Q89p}</div>
+                                                    </div>
+                                                )}
+                                                {c.Q17 && (
+                                                    <div className="bg-orange-50 p-3 rounded-lg">
+                                                        <div className="text-xs font-bold text-orange-700 mb-1">💬 Q17 顧客意見</div>
+                                                        <div className="text-sm text-orange-800">{c.Q17}</div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="text-xs font-bold text-slate-600 mb-2">各題分數（&lt;8分標紅）</div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {qKeys.map(k => {
+                                                    const v = c.scores?.[k] ?? c.scores?.[k.replace('_','.')];
+                                                    const isLow = v !== undefined && v < 8;
+                                                    return (
+                                                        <div key={k} className={`px-2 py-1 rounded text-xs font-semibold ${isLow ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-slate-100 text-slate-600'}`}>
+                                                            {QUESTION_DEFS[k].label}: {v ?? '-'}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </React.Fragment>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+    }
+
+    // ===== 智能分析 =====
+    function SmartInsights({ data }) {
+        const insights = [];
+        const lowCount = data.lowScoreCases?.length || 0;
+        const totalCases = data.plants?.reduce((s,p)=>s+p.total,0) || 0;
+        const mingJinRank = data.dealers?.findIndex(d => d.name === '銘勁' || d.name === '銘勁汽車') + 1;
+
+        if (mingJinRank === 1) insights.push({ type: 'success', title: '🏆 排名第一', content: '銘勁本月在所有經銷商中排名第一！', action: '繼續保持，持續精進服務品質' });
+        if (lowCount === 0) insights.push({ type: 'success', title: '🎯 零低分', content: '本月無低分案件，全員達標！', action: '表揚全體同仁，分享成功經驗' });
+        if (lowCount >= 1) insights.push({ type: 'warning', title: '低分偏多', content: `本月共 ${lowCount} 件低分案件`, action: '建議召開檢討會議，分析共同失分原因' });
+
+        const worstPlant = data.plants?.sort((a,b)=>a.score-b.score)[0];
+        if (worstPlant && worstPlant.score < 960) insights.push({ type: 'warning', title: '待改善', content: `${worstPlant.name} 分數 ${worstPlant.score.toFixed(2)} 低於目標`, action: `建議加強 ${worstPlant.name} 培訓輔導` });
+
+        if (insights.length === 0) insights.push({ type: 'info', title: '💡 整體正常', content: '本月整體表現穩定', action: '建議持續追蹤各項指標' });
+
+        const colors = { success: 'border-green-400 bg-green-50', warning: 'border-orange-400 bg-orange-50', info: 'border-blue-400 bg-blue-50' };
+
+        return (
+            <div className="bg-white rounded-xl border border-slate-200 px-4 py-2 flex flex-wrap gap-2 items-center">
+                <span className="text-xs font-bold text-slate-500 mr-1">📋 分析：</span>
+                {insights.map((ins, i) => {
+                    const tagColors = { success: 'bg-green-100 text-green-700 border-green-300', warning: 'bg-orange-100 text-orange-700 border-orange-300', info: 'bg-blue-100 text-blue-700 border-blue-300' };
+                    return (
+                        <span key={i} className={`text-xs font-semibold px-2 py-1 rounded border ${tagColors[ins.type]}`}>
+                            {ins.title}：{ins.content}
+                        </span>
+                    );
+                })}
+            </div>
+        );
+    }
+
+    // ===== Error Boundary =====
+    class ErrorBoundary extends React.Component {
+        constructor(props) { super(props); this.state = { hasError: false }; }
+        static getDerivedStateFromError() { return { hasError: true }; }
+        render() {
+            if (this.state.hasError) return (
+                <div className="min-h-screen flex items-center justify-center bg-red-50">
+                    <div className="bg-white p-8 rounded-xl shadow-xl max-w-md text-center">
+                        <h1 className="text-xl font-bold text-red-600 mb-4">⚠️ 系統錯誤</h1>
+                        <button onClick={() => { localStorage.clear(); location.reload(); }} className="bg-red-600 text-white px-6 py-2 rounded-lg font-bold">清除資料並重載</button>
+                    </div>
+                </div>
+            );
+            return this.props.children;
+        }
+    }
+
+    function init() {
+        if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
+            document.body.innerHTML = '<div style="padding:40px;text-align:center;"><h2>載入失敗，請重新整理頁面</h2></div>';
+            return;
+        }
+        ReactDOM.createRoot(document.getElementById('root')).render(
+            <ErrorBoundary><App /></ErrorBoundary>
+        );
+    }
+
+    document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', init) : init();
+
+    </script>
+</body>
+</html>

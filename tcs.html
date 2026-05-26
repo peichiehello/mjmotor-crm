@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>銘勁汽車 TCS 080案件分析儀表板</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    
+    <!-- PropTypes (Recharts 所需的依賴) -->
+    <script crossorigin src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Recharts -->
+    <script src="https://unpkg.com/recharts@2.10.4/umd/Recharts.js"></script>
+
+    <!-- PapaParse & SheetJS for File Upload -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+
+    <!-- Firebase 模組化載入 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 將 Firebase 依賴暴露給全域，讓 Babel 編譯的 React 能夠使用
+        window.FirebaseDeps = {
+            initializeApp, getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged,
+            getFirestore, collection, doc, setDoc, onSnapshot
+        };
+    </script>
+
+    <style>
+        body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f3f4f6; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 方案 A 頁面標題區 */
+        .page-header { background: white; border-bottom: 1px solid #e5e7eb; padding: 14px 24px; }
+        .page-header .breadcrumb { font-size: 11px; color: #9ca3af; margin-bottom: 6px; }
+        .page-header .title-row { display: flex; align-items: flex-start; gap: 10px; }
+        .page-header .red-accent { width: 3px; min-height: 22px; background: #b91c1c; border-radius: 2px; margin-top: 2px; flex-shrink: 0; }
+        .page-header h1 { font-size: 17px; font-weight: 600; color: #111827; line-height: 1.3; }
+        .page-header .subtitle { font-size: 12px; color: #6b7280; margin-top: 2px; }
+        .page-header .toolbar { display: flex; align-items: center; gap: 8px; margin-top: 10px; margin-left: 13px; flex-wrap: wrap; }
+        .page-header .year-btn { font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid #e5e7eb; background: #f9fafb; color: #374151; cursor: pointer; font-family: inherit; }
+        .page-header .year-btn.active { background: #fef2f2; color: #b91c1c; border-color: #fca5a5; font-weight: 600; }
+        .page-header .toolbar select { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #e5e7eb; background: #f9fafb; color: #374151; font-family: inherit; cursor: pointer; }
+        .page-header .upload-label { font-size: 12px; padding: 4px 12px; border-radius: 6px; border: 1px solid #fca5a5; background: #fff5f5; color: #b91c1c; cursor: pointer; display: flex; align-items: center; gap: 4px; margin-left: auto; }
+        .page-header .sync-badge { font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid #e5e7eb; background: #f9fafb; color: #6b7280; }
+
+        /* 報表專用表格樣式 */
+        .report-table th, .report-table td { border: 1px solid #e5e7eb; padding: 10px 8px; text-align: center; font-size: 13px; }
+        .report-table th { background-color: #b91c1c; color: white; font-weight: bold; }
+        .report-table .subtotal-row td { background-color: #fee2e2; color: #b91c1c; font-weight: bold; }
+        .report-table .total-row td { background-color: #b91c1c; color: white; font-weight: bold; }
+        .report-table .dept-col { font-weight: bold; background-color: #f9fafb; vertical-align: middle; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+        const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip: RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } = window.Recharts;
+
+        // --- 設定常數 ---
+        const HOLIDAYS = [
+            '2024-01-01', '2024-02-08', '2024-02-09', '2024-02-12', '2024-02-13', '2024-02-14', '2024-02-28', '2024-04-04', '2024-04-05', '2024-05-01', '2024-06-10', '2024-09-17', '2024-10-10',
+            '2025-01-01', '2025-01-27', '2025-01-28', '2025-01-29', '2025-01-30', '2025-01-31', '2025-02-28', '2025-04-03', '2025-04-04', '2025-05-01', '2025-05-30', '2025-10-06', '2025-10-10',
+            '2026-01-01', '2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20', '2026-04-03', '2026-04-06', '2026-05-01', '2026-06-19', '2026-09-25', '2026-10-09'
+        ];
+        const MAKEUP_DAYS = ['2024-02-17', '2025-02-08'];
+        const COLORS = ['#b91c1c', '#111827', '#4b5563', '#991b1b', '#374151', '#7f1d1d'];
+
+        // --- 工具函數 ---
+        const parseCustomDate = (dateStr) => {
+            if (!dateStr) return null;
+            let str = String(dateStr).replace(/\*/g, '').trim();
+            let ampmMatch = str.match(/(上午|下午)\s*(\d{1,2}):(\d{2}):(\d{2})/);
+            if (ampmMatch) {
+                let h = parseInt(ampmMatch[2]);
+                if (ampmMatch[1] === '下午' && h < 12) h += 12;
+                if (ampmMatch[1] === '上午' && h === 12) h = 0;
+                str = str.replace(/(上午|下午)\s*\d{1,2}:\d{2}:\d{2}/, `${h.toString().padStart(2, '0')}:${ampmMatch[3]}:${ampmMatch[4]}`);
+            }
+            str = str.replace(/(\d{4})-(\d{1,2})-(\d{1,2})/, '$1/$2/$3');
+            let d = new Date(str);
+            return isNaN(d.getTime()) ? null : d;
+        };
+
+        const isWorkingDay = (date) => {
+            const dStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            if (MAKEUP_DAYS.includes(dStr)) return true;
+            if (HOLIDAYS.includes(dStr)) return false;
+            return date.getDay() !== 0 && date.getDay() !== 6; 
+        };
+
+        const getWorkingHoursDiff = (startDate, endDate) => {
+            if (!startDate || !endDate || startDate >= endDate) return 0;
+            let totalMs = 0;
+            let current = new Date(startDate);
+            while (current < endDate) {
+                if (!isWorkingDay(current)) {
+                    current.setDate(current.getDate() + 1);
+                    current.setHours(8, 30, 0, 0);
+                    continue;
+                }
+                let workStart = new Date(current); workStart.setHours(8, 30, 0, 0);
+                let workEnd = new Date(current); workEnd.setHours(17, 30, 0, 0);
+
+                if (current < workStart) current = new Date(workStart);
+                if (current >= workEnd) {
+                    current.setDate(current.getDate() + 1);
+                    current.setHours(8, 30, 0, 0);
+                    continue;
+                }
+                let blockEnd = (endDate < workEnd && current.toDateString() === endDate.toDateString()) ? endDate : workEnd;
+                totalMs += (blockEnd - current);
+                
+                current = new Date(blockEnd);
+                if (current.getTime() === workEnd.getTime() && current < endDate) {
+                    current.setDate(current.getDate() + 1);
+                    current.setHours(8, 30, 0, 0);
+                }
+            }
+            return totalMs / 3600000;
+        };
+
+        const getWorkingDays = (startDate, endDate) => {
+            if (!startDate || !endDate || startDate > endDate) return 0;
+            let count = 0, cur = new Date(startDate); cur.setHours(0,0,0,0);
+            let end = new Date(endDate); end.setHours(0,0,0,0);
+            while (cur < end) {
+                if (isWorkingDay(cur)) count++;
+                cur.setDate(cur.getDate() + 1);
+            }
+            return count;
+        };
+
+        const categorizeSummary = (text) => {
+            if (!text) return '其他';
+            if (/異音|漏水|故障|維修/.test(text)) return '品質問題';
+            if (/態度|接待|客訴/.test(text)) return '服務態度';
+            if (/延期|交車|等候/.test(text)) return '交車進度';
+            if (/APP|設定|連線|導航/.test(text)) return '系統操作';
+            if (/零件|缺料|待料/.test(text)) return '零件供應';
+            return '一般諮詢';
+        };
+
+        const getDeptAndUnit = (rawUnit = '未分類') => {
+            const isSales = rawUnit.includes('所') || rawUnit.includes('營業');
+            const isService = rawUnit.includes('廠') || rawUnit.includes('服務');
+            const dept = isSales ? '營業部' : (isService ? '服務部' : '其他');
+            
+            let unit = rawUnit;
+            if (dept === '營業部') {
+                if (rawUnit.includes('中壢')) unit = '中壢所';
+                else if (rawUnit.includes('八德')) unit = '八德所';
+                else if (rawUnit.includes('桃園')) unit = '桃園所';
+            } else if (dept === '服務部') {
+                if (rawUnit.includes('中壢')) unit = '中壢廠';
+                else if (rawUnit.includes('八德')) unit = '八德廠';
+            }
+            return { dept, unit };
+        };
+
+        // --- 共用 UI 元件 ---
+        const Icons = {
+            Upload: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+            FileText: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
+            Clock: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+            CheckCircle: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+            AlertTriangle: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+            Chart: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+            Table: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>,
+            Cloud: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
+        };
+
+        const KpiCard = ({ title, Icon, value, unit, borderClass, textClass, highlightClass, indicator }) => (
+            <div className="bg-white p-5 rounded-xl border border-slate-200">
+                <div className="flex justify-between items-start">
+                    <p className="text-slate-500 text-sm font-medium">{title}</p>
+                    <span className={textClass}><Icon /></span>
+                </div>
+                <div className="flex items-baseline gap-2 mt-2">
+                    <h2 className={`text-3xl font-bold ${highlightClass || 'text-slate-800'}`}>{value} {unit && <span className="text-sm text-slate-400 font-normal">{unit}</span>}</h2>
+                    {indicator && <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded font-medium text-slate-500">{indicator}</span>}
+                </div>
+            </div>
+        );
+
+        // --- 主程式區塊 ---
+        const App = () => {
+            const [rawData, setRawData] = useState([]);
+            const [selectedYear, setSelectedYear] = useState('2026');
+            const [selectedMonth, setSelectedMonth] = useState('all');
+            const [activeTab, setActiveTab] = useState('report'); 
+            const [user, setUser] = useState(null);
+            const [syncStatus, setSyncStatus] = useState('');
+            const [fileName, setFileName] = useState('');
+            const [dataTime, setDataTime] = useState('');
+            const fileInputRef = useRef(null);
+
+            // --- 1. Firebase 雲端初始化與認證 ---
+            useEffect(() => {
+                let timer;
+                const initFirebase = async () => {
+                    const { initializeApp, getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, getFirestore } = window.FirebaseDeps;
+                    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+                    const app = initializeApp(firebaseConfig);
+                    const auth = getAuth(app);
+                    window.db = getFirestore(app);
+
+                    const initAuth = async () => {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    };
+                    await initAuth();
+
+                    onAuthStateChanged(auth, (u) => {
+                        setUser(u);
+                    });
+                };
+
+                // 等待 Firebase 模組載入完畢
+                if (!window.FirebaseDeps) {
+                    timer = setInterval(() => {
+                        if (window.FirebaseDeps) {
+                            clearInterval(timer);
+                            initFirebase();
+                        }
+                    }, 100);
+                } else {
+                    initFirebase();
+                }
+                return () => { if (timer) clearInterval(timer); };
+            }, []);
+
+            // --- 2. 模擬資料產生器 (僅在無雲端資料時使用) ---
+            const generateMockData = () => {
+                const mock = [], units = ['中壢所', '八德所', '桃園所', '中壢廠', '八德廠'];
+                const reps = ['黃希宇', '周呈儒', '邱玉華', '張大明', '李小玲'], models = ['HS', 'ZS', 'PHEV', 'G50'];
+                const summaries = ['方向燈設定問題', '保養後底盤有異音', 'APP連線失敗無法解鎖', '交車延期超過兩週', '接待態度冷淡', '車載導航無法更新'];
+                const reviews = ['*已接獲來函訊息...', '*2/3已協助顧客處理', '*與客溝通中，建議暫結', '*車主需要代步車'];
+                const statuses = ['結案', '待結案', '暫時結案', '處理中', '暫結已結案', '暫結'];
+                
+                for (let i = 0; i < 120; i++) {
+                    const year = Math.random() > 0.3 ? 2026 : 2025;
+                    const month = year === 2026 ? Math.floor(Math.random() * 4) + 1 : Math.floor(Math.random() * 12) + 1;
+                    const date = new Date(year, month - 1, Math.floor(Math.random() * 28) + 1, Math.floor(Math.random() * 8) + 9, 0);
+                    const isMet15 = Math.random() > 0.15, isMet5d = Math.random() > 0.1;
+                    const replyDate = new Date(date.getTime() + (isMet15 ? Math.random() * 3600000 : 7200000 + Math.random() * 18000000));
+                    const closeDate = new Date(date.getTime() + (isMet5d ? Math.random() * 4 * 86400000 : 6 * 86400000 + Math.random() * 5 * 86400000));
+
+                    mock.push({
+                        '案件編號': `MS-C-${year}-${month.toString().padStart(2, '0')}-${i.toString().padStart(4, '0')}`,
+                        '立案日期': date.toISOString(), '發文日期': date.toISOString(), '第一次回覆時間': replyDate.toISOString(), '結案時間': closeDate.toISOString(),
+                        '處理單位': units[Math.floor(Math.random() * units.length)], '業代': reps[Math.floor(Math.random() * reps.length)],
+                        '車型': models[Math.floor(Math.random() * models.length)], '牌照號碼': `MG-${Math.floor(Math.random()*9000)+1000}`,
+                        '客戶姓名': '王O明', '摘要欄': summaries[Math.floor(Math.random() * summaries.length)],
+                        '進度': statuses[Math.floor(Math.random() * statuses.length)], '審核內容': reviews[Math.floor(Math.random() * reviews.length)]
+                    });
+                }
+                setRawData(mock);
+                setSyncStatus('⚠️ 目前為測試資料 (尚未上傳)');
+            };
+
+            // --- 3. 從 localStorage 載入資料 ---
+            useEffect(() => {
+                try {
+                    const saved = localStorage.getItem('tcs_dashboard_data');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        if (parsed.data) setRawData(parsed.data);
+                        if (parsed.fileName) setFileName(parsed.fileName);
+                        if (parsed.dataTime) setDataTime(parsed.dataTime);
+                        setSyncStatus('loaded');
+                        setTimeout(() => setSyncStatus(''), 3000);
+                    } else {
+                        generateMockData();
+                    }
+                } catch (e) {
+                    console.error("Load error:", e);
+                    generateMockData();
+                }
+            }, []);
+
+            // --- 4. 儲存資料到 localStorage ---
+            const saveToCloud = (dataArray, name) => {
+                try {
+                    setSyncStatus('saving');
+                    const now = new Date();
+                    const nowStr = now.getFullYear() + '/' + String(now.getMonth()+1).padStart(2,'0') + '/' +
+                                   String(now.getDate()).padStart(2,'0') + ' ' +
+                                   String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+                    localStorage.setItem('tcs_dashboard_data', JSON.stringify({ data: dataArray, fileName: name, dataTime: nowStr }));
+                    setFileName(name);
+                    setDataTime(nowStr);
+                    setSyncStatus('saved');
+                    setTimeout(() => setSyncStatus(''), 3000);
+                } catch (e) {
+                    console.error("Save error:", e);
+                    setSyncStatus('error');
+                }
+            };
+
+            // 提取所有可用年份
+            const availableYears = useMemo(() => {
+                const ySet = new Set();
+                rawData.forEach(r => {
+                    const d = parseCustomDate(r['發文日期'] || r['立案日期']);
+                    if (d) ySet.add(d.getFullYear().toString());
+                });
+                return Array.from(ySet).sort().reverse();
+            }, [rawData]);
+
+            useEffect(() => {
+                if (availableYears.length > 0 && !availableYears.includes(selectedYear)) {
+                    setSelectedYear(availableYears[0]);
+                }
+            }, [availableYears, selectedYear]);
+
+            // --- 單一迴圈完成核心資料計算 ---
+            const processedData = useMemo(() => {
+                const matrix = {
+                    '營業部': { '中壢所': Array(12).fill(0), '八德所': Array(12).fill(0), '桃園所': Array(12).fill(0) },
+                    '服務部': { '中壢廠': Array(12).fill(0), '八德廠': Array(12).fill(0) }
+                };
+
+                const stats = {
+                    total: 0, met15h: 0, met5d: 0, units: {}, categories: {},
+                    monthlyTrend: Array(12).fill(0).map((_, i) => ({ name: `${i+1}月`, count: 0, met15: 0, met5: 0 })),
+                    failedList: [], pendingList: [], monthlyMatrix: matrix
+                };
+
+                rawData.forEach(item => {
+                    const d = parseCustomDate(item['發文日期'] || item['立案日期']);
+                    if (!d || d.getFullYear().toString() !== selectedYear) return;
+
+                    const mIdx = d.getMonth();
+                    const { dept, unit } = getDeptAndUnit(item['處理單位']);
+
+                    // 1. 填入全年矩陣(給報表1使用)
+                    if (dept && matrix[dept][unit] !== undefined) matrix[dept][unit][mIdx]++;
+
+                    // 2. 若選擇了特定月份，過濾不符的資料
+                    if (selectedMonth !== 'all' && (mIdx + 1).toString() !== selectedMonth) return;
+
+                    // 3. 處理各項指標與 KPI
+                    stats.total++;
+                    stats.monthlyTrend[mIdx].count++;
+
+                    const reply = parseCustomDate(item['第一次回覆時間']);
+                    const isMet15 = reply ? getWorkingHoursDiff(d, reply) <= 1.5 : false;
+
+                    const status = (item['進度'] || '').trim();
+                    // 只要包含「結案」或「暫結」，均視為結案並計算結案率
+                    const isClosedStatus = status.includes('結案') || status.includes('暫結');
+                    const isMet5 = isClosedStatus && item['結案時間'] 
+                        ? getWorkingDays(d, parseCustomDate(item['結案時間'])) <= 5 
+                        : false;
+
+                    if (isMet15) { stats.met15h++; stats.monthlyTrend[mIdx].met15++; }
+                    if (isMet5) { stats.met5d++; stats.monthlyTrend[mIdx].met5++; }
+
+                    if (!stats.units[unit]) stats.units[unit] = { name: unit, dept, count: 0, met15: 0, met5: 0 };
+                    stats.units[unit].count++;
+                    if (isMet15) stats.units[unit].met15++;
+                    if (isMet5) stats.units[unit].met5++;
+
+                    const category = categorizeSummary(item['摘要欄']);
+                    stats.categories[category] = (stats.categories[category] || 0) + 1;
+
+                    // 異常名單 (1.5H 或 5日未達標)
+                    if (!isMet15 || !isMet5) {
+                        const reasons = [];
+                        if (!isMet15) reasons.push('1.5H未達標');
+                        if (!isMet5) reasons.push('5日未達標');
+                        stats.failedList.push({ ...item, reason: reasons.join(' / ') });
+                    }
+
+                    // 待辦名單過濾邏輯：包含「暫」字或不含「結案」，但絕對排除「暫結已結案」
+                    if ((status.includes('暫') || !status.includes('結案')) && !status.includes('暫結已結案')) {
+                        stats.pendingList.push(item);
+                    }
+                });
+                return stats;
+            }, [rawData, selectedYear, selectedMonth]);
+
+            // --- 匯報 localStorage 寫入 ---
+            useEffect(() => {
+                if (!processedData || selectedMonth === 'all') return;
+                try {
+                    const month = selectedMonth.padStart(2, '0');
+                    const key = `mj_tcs_${selectedYear}_${month}`;
+                    const cats = processedData.categories || {};
+                    const total = processedData.total || 0;
+                    const pending = processedData.pendingList?.length || 0;
+                    const closed = processedData.met5d || 0;
+                    const closedCount = total - pending;
+                    const payload = {
+                        year: selectedYear, month,
+                        total,
+                        closedCount,
+                        closeRate: total > 0 ? +((closedCount / total) * 100).toFixed(1) : 0,
+                        pending,
+                        met15hCount: processedData.met15h || 0,
+                        met15hRate: total > 0 ? +((processedData.met15h / total) * 100).toFixed(1) : 0,
+                        met5dCount: processedData.met5d || 0,
+                        met5dRate: total > 0 ? +((processedData.met5d / total) * 100).toFixed(1) : 0,
+                        categories: cats,
+                        units: processedData.units || {},
+                        updatedAt: new Date().toISOString()
+                    };
+                    localStorage.setItem(key, JSON.stringify(payload));
+                } catch(e) { console.error('TCS 匯報寫入失敗', e); }
+            }, [processedData, selectedYear, selectedMonth]);
+
+            // --- 檔案上傳與觸發雲端儲存 ---
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const fileExt = file.name.split('.').pop().toLowerCase();
+                try {
+                    if (fileExt === 'csv') {
+                        window.Papa.parse(file, { 
+                            header: true, skipEmptyLines: true, 
+                            complete: (res) => {
+                                setRawData(res.data);
+                                saveToCloud(res.data, file.name);
+                            }
+                        });
+                    } else if (fileExt === 'xlsx' || fileExt === 'xls') {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const workbook = window.XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                            const parsedData = window.XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { raw: false, defval: "" });
+                            setRawData(parsedData);
+                            saveToCloud(parsedData, file.name);
+                        };
+                        reader.readAsArrayBuffer(file);
+                    } else { alert("請上傳 Excel 或 CSV 檔案。"); }
+                } catch (error) { alert("讀取檔案發生錯誤。"); }
+                event.target.value = '';
+            };
+
+            // --- UI 渲染輔助函數 ---
+            const renderMatrixRows = (deptName, units) => {
+                const deptTotals = Array(12).fill(0);
+                const rows = units.map((unit, idx) => {
+                    const rowData = processedData.monthlyMatrix[deptName][unit];
+                    rowData.forEach((v, i) => deptTotals[i] += v);
+                    return (
+                        <tr key={unit}>
+                            {idx === 0 && <td rowSpan={units.length} className="dept-col">{deptName}</td>}
+                            <td className="font-medium text-slate-700">{unit}</td>
+                            {rowData.map((val, i) => <td key={i}>{val}</td>)}
+                            <td className="font-bold">{rowData.reduce((a, b) => a + b, 0)}</td>
+                        </tr>
+                    );
+                });
+                rows.push(
+                    <tr className="subtotal-row" key={`${deptName}-sub`}>
+                        <td colSpan={2}>{deptName}合計</td>
+                        {deptTotals.map((val, i) => <td key={i}>{val}</td>)}
+                        <td>{deptTotals.reduce((a, b) => a + b, 0)}</td>
+                    </tr>
+                );
+                return { rows, deptTotals };
+            };
+
+            const renderReportTab = () => {
+                const salesData = renderMatrixRows('營業部', ['中壢所', '八德所', '桃園所']);
+                const serviceData = renderMatrixRows('服務部', ['中壢廠', '八德廠']);
+                const grandTotals = salesData.deptTotals.map((v, i) => v + serviceData.deptTotals[i]);
+                const displayMonth = selectedMonth === 'all' ? '全年總覽' : `${selectedMonth}月`;
+
+                const targetUnits = [
+                    { name: '中壢所', dept: '營業部' }, { name: '八德所', dept: '營業部' }, { name: '桃園所', dept: '營業部' },
+                    { name: '中壢廠', dept: '服務部' }, { name: '八德廠', dept: '服務部' }
+                ];
+                const renderStatusLabel = (isMet, isNull) => isNull ? "-" : (isMet ? <span className="text-green-600 font-bold">☑ 達標</span> : <span className="text-red-600 font-bold">☐ 未達標</span>);
+
+                return (
+                    <div className="space-y-10 animate-fade-in pb-10">
+                        {/* 報表 1：各月明細 */}
+                        <div>
+                            <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",marginBottom:"12px",paddingLeft:"10px",borderLeft:"3px solid #b91c1c",display:"flex",alignItems:"center"}}>{selectedYear}年 各月詳細數據 (12個月)</h2>
+                            <div className="overflow-x-auto bg-white shadow-sm rounded-lg border border-slate-200">
+                                <table className="w-full report-table">
+                                    <thead><tr><th>部門</th><th>單位</th>{Array.from({length:12}, (_,i)=><th key={i}>{i+1}月</th>)}<th>合計</th></tr></thead>
+                                    <tbody>{salesData.rows}{serviceData.rows}</tbody>
+                                    <tfoot>
+                                        <tr className="total-row"><td colSpan={2}>全部門合計</td>{grandTotals.map((v, i) => <td key={i}>{v}</td>)}<td>{grandTotals.reduce((a,b)=>a+b,0)}</td></tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* 報表 2：達標率明細 */}
+                        <div>
+                            <div className="flex items-end justify-between mb-3">
+                                <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>{selectedYear}年{displayMonth} 達標率明細</h2>
+                                {selectedMonth === 'all' && <span className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded font-bold">註：目前為全年加總，需單月明細請切換月份。</span>}
+                            </div>
+                            <div className="overflow-x-auto bg-white shadow-sm rounded-lg border border-slate-200">
+                                <table className="w-full report-table">
+                                    <thead><tr><th>部門</th><th>單位</th><th>案件數</th><th>1.5H回覆率 (>=90%)</th><th>達標狀態</th><th>5日結案率 (>=88%)</th><th>達標狀態</th></tr></thead>
+                                    <tbody>
+                                        {targetUnits.map((u, idx) => {
+                                            const stat = processedData.units[u.name] || { count: 0, met15: 0, met5: 0 };
+                                            const r15 = stat.count > 0 ? ((stat.met15 / stat.count) * 100).toFixed(1) : null;
+                                            const r5 = stat.count > 0 ? ((stat.met5 / stat.count) * 100).toFixed(1) : null;
+                                            return (
+                                                <tr key={u.name} className="hover:bg-slate-50">
+                                                    {u.dept === '營業部' && idx === 0 && <td rowSpan={3} className="dept-col">營業部</td>}
+                                                    {u.dept === '服務部' && idx === 3 && <td rowSpan={2} className="dept-col">服務部</td>}
+                                                    <td className="font-medium text-slate-700">{u.name}</td>
+                                                    <td className="font-bold">{stat.count}</td>
+                                                    <td>{r15 !== null ? `${r15}%` : '-'}</td><td>{renderStatusLabel(r15 >= 90, stat.count === 0)}</td>
+                                                    <td>{r5 !== null ? `${r5}%` : '-'}</td><td>{renderStatusLabel(r5 >= 88, stat.count === 0)}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* 報表 3：未達標 */}
+                        <div>
+                            <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",marginBottom:"12px",paddingLeft:"10px",borderLeft:"3px solid #b91c1c",display:"flex",alignItems:"center"}}>📄 {selectedYear}年{displayMonth} 未達標案件 <span className="text-red-600">(共 {processedData.failedList.length} 件)</span></h2>
+                            <div className="bg-white shadow-sm rounded-lg border border-slate-200 overflow-hidden">
+                                {processedData.failedList.length > 0 ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm text-center">
+                                            <thead className="bg-red-800 text-white font-bold whitespace-nowrap">
+                                                <tr><th className="p-3">案件編號</th><th className="p-3">單位</th><th className="p-3">業代</th><th className="p-3">車牌</th><th className="p-3">摘要</th><th className="p-3">未達標原因</th></tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-200">
+                                                {processedData.failedList.map((item, i) => (
+                                                    <tr key={i} className="hover:bg-red-50/30">
+                                                        {/* 支援案件編號或客訴編號 */}
+                                                        <td className="p-3 font-semibold">{item['案件編號'] || item['客訴編號']}</td>
+                                                        <td className="p-3">{item['處理單位']}</td><td className="p-3">{item['業代'] || '-'}</td>
+                                                        <td className="p-3">{item['牌照號碼']}</td><td className="p-3 text-left truncate max-w-[200px]" title={item['摘要欄']}>{item['摘要欄']}</td>
+                                                        <td className="p-3 text-red-600 font-bold">{item.reason}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : <div className="p-8 text-center"><span className="text-2xl">🎉</span><p className="text-slate-600 font-bold mt-2">本區間所有案件皆已達標！</p></div>}
+                            </div>
+                        </div>
+
+                        {/* 報表 4：待追蹤 */}
+                        <div>
+                            <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",marginBottom:"12px",paddingLeft:"10px",borderLeft:"3px solid #b91c1c",display:"flex",alignItems:"center"}}>⏳ 待追蹤案件列表 <span className="text-blue-600">(共 {processedData.pendingList.length} 件)</span></h2>
+                            <div className="bg-white shadow-sm rounded-lg border border-slate-200 overflow-hidden">
+                                {processedData.pendingList.length > 0 ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm text-center">
+                                            <thead className="bg-red-800 text-white font-bold whitespace-nowrap">
+                                                <tr><th className="p-3">案件編號</th><th className="p-3">單位</th><th className="p-3">業代</th><th className="p-3">車型</th><th className="p-3">車牌</th><th className="p-3">客戶</th><th className="p-3">摘要</th><th className="p-3">進度</th><th className="p-3">審核內容</th></tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-200">
+                                                {processedData.pendingList.map((item, i) => (
+                                                    <tr key={i} className="hover:bg-slate-50">
+                                                        {/* 支援案件編號或客訴編號 */}
+                                                        <td className="p-3 font-semibold">{item['案件編號'] || item['客訴編號']}</td>
+                                                        <td className="p-3">{item['處理單位']}</td><td className="p-3">{item['業代'] || '-'}</td>
+                                                        <td className="p-3">{item['車型'] || '-'}</td><td className="p-3">{item['牌照號碼']}</td><td className="p-3">{item['客戶姓名']}</td>
+                                                        <td className="p-3 text-left truncate max-w-[150px]" title={item['摘要欄']}>{item['摘要欄']}</td>
+                                                        <td className="p-3 font-bold text-blue-700 bg-blue-50/50">{item['進度']}</td>
+                                                        <td className="p-3 text-left text-xs text-slate-500 max-w-[150px] truncate" title={item['審核內容']}>{item['審核內容'] || '-'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : <div className="p-8 text-center text-slate-500 font-bold">目前無待追蹤之未結案。</div>}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div>
+                    <div className="page-header sticky top-0 z-50">
+                        <div className="breadcrumb">顧關部 / TCS 0800 案件分析</div>
+                        <div className="title-row">
+                            <div className="red-accent"></div>
+                            <div>
+                                <h1>TCS 0800 案件分析</h1>
+                                <div className="subtitle">銘勁汽車 · 售後服務監控系統</div>
+                            </div>
+                        </div>
+                        <div className="toolbar">
+                            {availableYears.map(y => (
+                                <button key={y} className={`year-btn ${selectedYear === y ? 'active' : ''}`} onClick={() => setSelectedYear(y)}>{y}</button>
+                            ))}
+                            <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
+                                <option value="all">全年總覽</option>
+                                {Array.from({length: 12}, (_, i) => <option key={i+1} value={(i+1).toString()}>{i+1}月</option>)}
+                            </select>
+                            {fileName && (
+                                <span style={{fontSize:'11px',padding:'3px 8px',borderRadius:'5px',background:'#fef2f2',border:'1px solid #fecaca',color:'#991b1b'}}>
+                                    📄 {fileName}
+                                </span>
+                            )}
+                            {dataTime && (
+                                <span style={{fontSize:'11px',color:'#9ca3af'}}>更新：{dataTime}</span>
+                            )}
+                            {syncStatus === 'saving' && <span style={{fontSize:'11px',color:'#6b7280',background:'#f9fafb',border:'1px solid #e5e7eb',padding:'3px 8px',borderRadius:'5px'}}>💾 儲存中...</span>}
+                            {syncStatus === 'saved' && <span style={{fontSize:'11px',color:'#15803d',background:'#f0fdf4',border:'1px solid #bbf7d0',padding:'3px 8px',borderRadius:'5px'}}>✅ 已儲存</span>}
+                            {syncStatus === 'loaded' && <span style={{fontSize:'11px',color:'#1d4ed8',background:'#eff6ff',border:'1px solid #bfdbfe',padding:'3px 8px',borderRadius:'5px'}}>☁️ 已載入雲端資料</span>}
+                            {syncStatus === 'error' && <span style={{fontSize:'11px',color:'#b91c1c',background:'#fef2f2',border:'1px solid #fecaca',padding:'3px 8px',borderRadius:'5px'}}>❌ 儲存失敗</span>}
+                            <label className="upload-label" style={{marginLeft:'unset'}}>
+                                <Icons.Upload /><span>手動匯入</span>
+                                <input type="file" onChange={handleFileUpload} accept=".csv, .xlsx, .xls" className="hidden" />
+                            </label>
+                            <button style={{fontSize:'12px',padding:'4px 12px',borderRadius:'6px',border:'1px solid #6ee7b7',background:'#f0fdf4',color:'#065f46',cursor:'pointer',display:'flex',alignItems:'center',gap:4,marginLeft:'auto'}}
+                                onClick={async()=>{
+                                    setSyncStatus('saving');
+                                    try{
+                                        const spUrl='https://fetcb107004.sharepoint.com/sites/customer-/Shared%20Documents/AI%E6%93%B7%E5%8F%96%E8%B3%87%E6%96%99/%E9%A1%A7%E5%AE%A2%E6%BB%BF%E6%84%8F/tcs%E5%AE%A2%E8%A8%B4%E8%B3%87%E6%96%99/tcs%E5%AE%A2%E8%A8%B4%E8%BD%89excel%E6%98%8E%E7%B4%B0%E8%B3%87%E6%96%99.xlsx';
+                                        const res=await fetch(spUrl,{credentials:'include'});
+                                        if(res.status===401||res.status===403)throw new Error('請先登入 O365（office.com）再重試');
+                                        if(res.status===404)throw new Error('找不到 TCS 客訴檔案，請確認 SharePoint 已放置');
+                                        if(!res.ok)throw new Error('HTTP '+res.status);
+                                        const buf=await res.arrayBuffer();
+                                        const dt=new DataTransfer();
+                                        dt.items.add(new File([buf],'tcs客訴轉excel明細資料.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+                                        const fakeEv={target:{files:dt.files,value:''}};
+                                        handleFileUpload(fakeEv);
+                                    }catch(e){setSyncStatus('error');alert('SharePoint 同步失敗：'+e.message);setTimeout(()=>setSyncStatus(''),4000);}
+                                }}>
+                                🔗 SharePoint 同步
+                            </button>
+                        </div>
+                    </div>
+
+                    <main className="w-full py-6">
+                        <div style={{maxWidth:"1400px", margin:"0 auto", padding:"0 24px"}} className="space-y-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <KpiCard title="當期案件數" Icon={Icons.FileText} value={processedData.total} unit="件" textClass="text-slate-400" borderClass="border-slate-900" />
+                            <KpiCard title="1.5H 回覆率" Icon={Icons.Clock} value={`${processedData.total > 0 ? ((processedData.met15h / processedData.total) * 100).toFixed(1) : 0}%`} highlightClass={processedData.total > 0 && (processedData.met15h/processedData.total) < 0.9 ? 'text-red-600' : 'text-green-600'} indicator="指標 90%" borderClass="border-blue-600" textClass="text-blue-600" />
+                            <KpiCard title="5日 結案率" Icon={Icons.CheckCircle} value={`${processedData.total > 0 ? ((processedData.met5d / processedData.total) * 100).toFixed(1) : 0}%`} highlightClass={processedData.total > 0 && (processedData.met5d/processedData.total) < 0.88 ? 'text-red-600' : 'text-green-600'} indicator="指標 88%" borderClass="border-indigo-600" textClass="text-indigo-600" />
+                            <KpiCard title="待追蹤 / 異常" Icon={Icons.AlertTriangle} value={processedData.failedList.length + processedData.pendingList.length} unit="件" highlightClass="text-red-700" borderClass="border-red-700" textClass="text-red-700" />
+                        </div>
+
+                        <div className="flex border-b border-slate-200 gap-2 md:gap-6 overflow-x-auto hide-scrollbar">
+                            {[{ id: 'report', label: '詳細報表 (列印版)', Icon: Icons.Table }, { id: 'overview', label: '圖表總覽', Icon: Icons.Chart }].map(tab => (
+                                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`pb-3 px-2 flex items-center gap-2 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === tab.id ? 'border-red-700 text-red-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+                                    <tab.Icon /> {tab.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div>
+                            {activeTab === 'report' && renderReportTab()}
+                            {activeTab === 'overview' && (
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
+                                    <div className="bg-white p-6 rounded-xl border border-slate-200">
+                                        <h3 style={{fontSize:"14px",fontWeight:700,color:"#111827",marginBottom:"20px",paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>年度趨勢分析</h3>
+                                        <div className="h-72">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <BarChart data={processedData.monthlyTrend}>
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 'bold'}} />
+                                                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                                                    <RechartsTooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontWeight: 'bold'}} />
+                                                    <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', fontWeight: 'bold', paddingTop: '10px' }} />
+                                                    <Bar dataKey="count" name="總件數" fill={COLORS[1]} radius={[4,4,0,0]} barSize={20} />
+                                                    <Bar dataKey="met15" name="1.5H達標" fill={COLORS[0]} radius={[4,4,0,0]} barSize={20} />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-xl border border-slate-200">
+                                        <h3 style={{fontSize:"14px",fontWeight:700,color:"#111827",marginBottom:"20px",paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>投訴類別分佈</h3>
+                                        <div className="h-72">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie data={Object.entries(processedData.categories).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value)} innerRadius={65} outerRadius={90} paddingAngle={5} dataKey="value">
+                                                        {Object.entries(processedData.categories).map((e, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                                                    </Pie>
+                                                    <RechartsTooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontWeight: 'bold'}} />
+                                                    <Legend verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '12px', fontWeight: 'bold' }} />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>銘勁汽車 CSI 戰情室</title>
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.10.4/umd/Recharts.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI','Microsoft JhengHei',sans-serif; background:#f3f4f6; margin:0; padding:0; }
+    .page-header { background:white; border-bottom:1px solid #e5e7eb; padding:14px 24px; position:sticky; top:0; z-index:50; }
+    .page-header .breadcrumb { font-size:11px; color:#9ca3af; margin-bottom:6px; }
+    .page-header .title-row { display:flex; align-items:flex-start; gap:10px; }
+    .page-header .red-accent { width:3px; min-height:22px; background:#b91c1c; border-radius:2px; margin-top:2px; flex-shrink:0; }
+    .page-header h1 { font-size:17px; font-weight:600; color:#111827; line-height:1.3; margin:0; }
+    .page-header .subtitle { font-size:12px; color:#6b7280; margin-top:2px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+    const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+            RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+            LineChart, Line, ReferenceLine, Cell, PieChart, Pie } = window.Recharts;
+
+    // SVG Icon components
+    const AlertTriangle = ({size=16,color="currentColor"}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+    const MapPin = ({size=16,color="currentColor"}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>;
+    const CheckCircle2 = ({size=16,color="currentColor"}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>;
+    const Medal = ({size=16,color="currentColor"}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="17" r="5"/><path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/></svg>;
+    const LayoutDashboard = ({size=16,color="currentColor"}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>;
+    const Upload = ({size=16,color="currentColor"}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>;
+    const FileSpreadsheet = ({size=16,color="currentColor"}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>;
+    const Phone = ({size=16,color="currentColor"}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.35 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 5.99 5.99l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
+    const Wrench = ({size=16,color="currentColor"}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>;
+    const UserCheck = ({size=16,color="currentColor"}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>;
+
+    const FACTORY_THEME = {
+      "中壢廠": { hd:"#eff6ff", hdBorder:"#bfdbfe", hdText:"#1e3a8a", accent:"#2563eb" },
+      "八德廠": { hd:"#f5f3ff", hdBorder:"#ddd6fe", hdText:"#3730a3", accent:"#7c3aed" },
+    };
+    const MGT_Q = { Q2:97.3, Q3:96.6, Q4:97.3, Q5:96.4, Q6:96.5, Q7:97.6, Q8:97.1, Q9:96.7, Q10:96.2, Q11:96.6 };
+    const ALL_Q_KEYS = ["Q2","Q3","Q4","Q5","Q6","Q7","Q8","Q9","Q10","Q11"];
+    const Q_LABELS = { Q2:"立即接待", Q3:"需求確認", Q4:"取車時間", Q5:"費用說明", Q6:"進度告知", Q7:"飲料點心", Q8:"準時完修", Q9:"一次修好", Q10:"車輛清潔", Q11:"整體滿意" };
+    const ADV_RESP  = ["Q2","Q3","Q4","Q5","Q6","Q10"];
+    const TECH_RESP = ["Q8","Q9"];
+    const WEEKLY_DEF = [
+      { w:"1-1週", M:825, BD:974, ZL:766, MGT:913 },
+      { w:"1-2週", M:900, BD:981, ZL:861, MGT:911 },
+      { w:"1-3週", M:953, BD:987, ZL:934, MGT:937 },
+      { w:"1-4週", M:964, BD:961, ZL:965, MGT:930 },
+      { w:"1-5週", M:942, BD:846, ZL:990, MGT:920 },
+      { w:"2-1週", M:982, BD:959, ZL:991, MGT:934 },
+      { w:"2-2週", M:935, BD:901, ZL:951, MGT:933 },
+      { w:"2-3週", M:938, BD:805, ZL:989, MGT:938 },
+      { w:"3-1週", M:925, BD:844, ZL:951, MGT:926 },
+      { w:"3-2週", M:924, BD:889, ZL:940, MGT:882 },
+      { w:"3-3週", M:911, BD:889, ZL:917, MGT:900 },
+    ];
+
+    function parseNum(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
+    function calcAlerts(data, key) {
+      const alerts = {}; let streak = 0;
+      data.forEach((d, i) => { if (d[key]!==undefined && d[key]<910) streak++; else streak=0; if (streak>=2) alerts[i]=true; });
+      return alerts;
+    }
+    function loadXLSX() {
+      return new Promise((res, rej) => {
+        if (window.XLSX) { res(window.XLSX); return; }
+        const s = document.createElement("script");
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+        s.onload = () => res(window.XLSX); s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+    function parseSummarySheet(ws) {
+      const rows = window.XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
+      const dealers=[]; let mgtScore=null, mgtSamples=null; const mgtQRow={}; const summaryRows=[];
+      rows.forEach(row => {
+        const code=String(row[0]||"").trim(), region=String(row[1]||"").trim(), branch=String(row[2]||"").trim();
+        const samples=parseNum(row[3]), score=parseNum(row[4]);
+        if (!["MGT","Y","M","S","F","R","Z","J"].includes(code)) return;
+        const qs={}; ALL_Q_KEYS.forEach((q,i)=>{const v=parseNum(row[7+i]); if(v!==null) qs[q]=v;});
+        if (code==="MGT"&&!branch) { mgtScore=score; mgtSamples=samples; Object.assign(mgtQRow,qs); return; }
+        summaryRows.push({code,region,branch,samples,score,qs});
+        if (!branch && !dealers.find(d=>d.code===code)) dealers.push({code,samples,score,isMingJin:code==="M",qs});
+      });
+      const mBranches=summaryRows.filter(r=>r.code==="M"&&r.branch);
+      const mTotal=summaryRows.find(r=>r.code==="M"&&!r.branch&&!r.region);
+      const mRegion=summaryRows.find(r=>r.code==="M"&&!r.branch&&r.region);
+      return {dealers, mgtScore, mgtSamples, mgtQRow, mBranches, mTotal:mTotal||mRegion};
+    }
+    function parseDetailSheet(ws) {
+      const rows=window.XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+      let headerIdx=-1;
+      rows.forEach((r,i)=>{if(String(r[6]||"").includes("服務廠名稱")||String(r[2]||"").includes("客戶姓名")) headerIdx=i;});
+      const dataStart=headerIdx>=0?headerIdx+3:1, Q_COL_START=28;
+      const advisorMap={}, techMap={}, lowQ11Records=[];
+      const cleanName=raw=>raw.replace(/^鈑噴\s*/,"").trim();
+      for (let i=dataStart; i<rows.length; i++) {
+        const r=rows[i]; if (String(r[3]||"").trim()!=="M") continue;
+        const factoryName=String(r[6]||"").trim(); if (!factoryName) continue;
+        const factKey=factoryName.includes("八德")?"八德廠":"中壢廠";
+        const advisor=cleanName(String(r[13]||"").trim()), tech=cleanName(String(r[14]||"").trim());
+        const custName=String(r[2]||"").trim(), carNo=String(r[18]||"").trim();
+        const scores={};
+        ALL_Q_KEYS.forEach((q,idx)=>{
+          const raw=String(r[Q_COL_START+idx]||"").trim().toUpperCase();
+          if (raw==="N"||raw==="DK"||raw==="") return;
+          const v=parseFloat(raw); if (!isNaN(v)&&v>=1&&v<=10) scores[q]=v;
+        });
+        if (Object.keys(scores).length===0) continue;
+        if (scores["Q11"]!==undefined&&scores["Q11"]<8) lowQ11Records.push({factKey,custName,carNo,advisor,tech,scores});
+        if (advisor&&!advisor.includes("SUM")&&!advisor.includes("宣陽")&&!advisor.includes("引擎")) {
+          const k=factKey+"||"+advisor;
+          if (!advisorMap[k]) advisorMap[k]={name:advisor,factory:factKey,samples:0,sums:{},rawScores:{}};
+          advisorMap[k].samples++;
+          ALL_Q_KEYS.forEach(q=>{
+            if (scores[q]!==undefined) {
+              if (!advisorMap[k].sums[q]) advisorMap[k].sums[q]={total:0,cnt:0};
+              advisorMap[k].sums[q].total+=scores[q]; advisorMap[k].sums[q].cnt++;
+              if (!advisorMap[k].rawScores[q]) advisorMap[k].rawScores[q]={sat:0,cnt:0};
+              advisorMap[k].rawScores[q].cnt++; if(scores[q]>=9) advisorMap[k].rawScores[q].sat++;
+            }
+          });
+        }
+        if (tech&&!tech.includes("SUM")&&!tech.includes("宣陽")&&!tech.includes("引擎")&&!tech.includes("技師")) {
+          const k=factKey+"||"+tech;
+          if (!techMap[k]) techMap[k]={name:tech,factory:factKey,samples:0,sums:{},rawScores:{}};
+          techMap[k].samples++;
+          ALL_Q_KEYS.forEach(q=>{
+            if (scores[q]!==undefined) {
+              if (!techMap[k].sums[q]) techMap[k].sums[q]={total:0,cnt:0};
+              techMap[k].sums[q].total+=scores[q]; techMap[k].sums[q].cnt++;
+              if (!techMap[k].rawScores[q]) techMap[k].rawScores[q]={sat:0,cnt:0};
+              techMap[k].rawScores[q].cnt++; if(scores[q]>=9) techMap[k].rawScores[q].sat++;
+            }
+          });
+        }
+      }
+      function calcAvgLocal(map, respKeys) {
+        return Object.values(map).map(p=>{
+          const qScores={};
+          ALL_Q_KEYS.forEach(q=>{if(p.sums[q]&&p.sums[q].cnt>0) qScores[q]=+((p.sums[q].total/p.sums[q].cnt)*10).toFixed(1);});
+          let ss=0,sc=0,sat=0,satT=0;
+          respKeys.forEach(q=>{
+            if(p.sums[q]&&p.sums[q].cnt>0){ss+=p.sums[q].total;sc+=p.sums[q].cnt;}
+            if(p.rawScores&&p.rawScores[q]){sat+=p.rawScores[q].sat;satT+=p.rawScores[q].cnt;}
+          });
+          const G=sc>0?ss/sc:null, F=satT>0?(sat/satT)*100:null;
+          const newScore=(G!==null&&F!==null)?+(F*G).toFixed(1):null;
+          return {name:p.name,factory:p.factory,samples:p.samples,qScores,newScore};
+        });
+      }
+      const allAdvisors=calcAvgLocal(advisorMap,ADV_RESP), allTechs=calcAvgLocal(techMap,TECH_RESP);
+      const result={};
+      ["中壢廠","八德廠"].forEach(fk=>{
+        result[fk]={
+          advisors:allAdvisors.filter(a=>a.factory===fk).sort((a,b)=>b.samples-a.samples),
+          techs:allTechs.filter(t=>t.factory===fk).sort((a,b)=>b.samples-a.samples),
+          lowQ11Records:lowQ11Records.filter(r=>r.factKey===fk),
+        };
+      });
+      return result;
+    }
+    function parseDCSheet(ws) {
+      const rows=window.XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+      let headerIdx=-1;
+      rows.forEach((r,i)=>{if(String(r[0]||"").includes("單位")&&String(r[6]||"").includes("電訪")) headerIdx=i;});
+      const dataStart=headerIdx>=0?headerIdx+1:1, records=[];
+      for (let i=dataStart; i<rows.length; i++) {
+        const r=rows[i]; const factory=String(r[0]||"").trim();
+        if (!factory.includes("廠")) continue;
+        const advisor=String(r[6]||"").trim(); if (!advisor) continue;
+        records.push({factory,advisor,cust:String(r[3]||"").trim(),car:String(r[4]||"").trim(),
+          date:String(r[5]||"").trim().slice(5),contacted:String(r[12]||"").trim(),
+          result:String(r[13]||"").trim(),issue:String(r[10]||"").trim()});
+      }
+      return records;
+    }
+    function deriveDCStats(records) {
+      const aMap={};
+      records.forEach(rec=>{
+        const k=rec.factory+"||"+rec.advisor;
+        if (!aMap[k]) aMap[k]={name:rec.advisor,factory:rec.factory,total:0,contacted:0,completed:0};
+        aMap[k].total++;
+        if (rec.contacted==="是") aMap[k].contacted++;
+        if (rec.result==="已完成"||(rec.contacted==="是"&&rec.result==="狀況良好")) aMap[k].completed++;
+      });
+      const byAdvisor=Object.values(aMap).map(a=>({...a,
+        contactRate:a.total>0?+((a.contacted/a.total)*100).toFixed(1):0,
+        fillRate:a.total>0?+((a.completed/a.total)*100).toFixed(1):0})).sort((a,b)=>b.fillRate-a.fillRate);
+      const total=records.length, cont=records.filter(r=>r.contacted==="是").length;
+      const good=records.filter(r=>r.result==="狀況良好").length, rew=records.filter(r=>["需重修","問題車"].includes(r.result)).length;
+      const fMap={};
+      records.forEach(r=>{
+        if (!fMap[r.factory]) fMap[r.factory]={name:r.factory,total:0,contacted:0};
+        fMap[r.factory].total++; if(r.contacted==="是") fMap[r.factory].contacted++;
+      });
+      const byFactory=Object.values(fMap).map(f=>({...f,contactRate:+((f.contacted/f.total)*100).toFixed(1)}));
+      const issues=records.filter(r=>r.issue&&r.issue.length>3&&
+        !["掛","掛斷","未接","語音","忙碌"].some(x=>r.issue.startsWith(x))&&
+        (r.result==="需重修"||r.result==="問題車"||r.issue.includes("客"))
+      ).slice(0,10).map(r=>({date:r.date,cust:r.cust,car:r.car,advisor:r.advisor,factory:r.factory,issue:r.issue,result:r.result}));
+      return {summary:{totalCases:total,contacted:cont,notContacted:total-cont,
+        contactRate:+((cont/total)*100).toFixed(1),confirmedGood:good,needRework:rew},byAdvisor,byFactory,issues};
+    }
+    function makeDot(alertMap, lineColor) {
+      return function CustomDot(props) {
+        const {cx,cy,index}=props;
+        if (!alertMap[index]) return React.createElement("circle",{key:index,cx,cy,r:4,fill:lineColor,stroke:"none"});
+        return React.createElement("g",{key:index},
+          React.createElement("circle",{cx,cy,r:7,fill:"#fef2f2",stroke:"#dc2626",strokeWidth:1.5}),
+          React.createElement("circle",{cx,cy,r:3.5,fill:"#dc2626"}));
+      };
+    }
+
+    function App() {
+      const [tab,setTab]=useState("summary");
+      const [uploadState,setUploadState]=useState({main:null,dc:null});
+      const [mainFiles,setMainFiles]=useState([]);
+      const [dcFiles,setDcFiles]=useState([]);
+      const [dataTime,setDataTime]=useState(null);
+      const [dynDealers,setDynDealers]=useState(null);
+      const [dynKpi,setDynKpi]=useState(null);
+      const [dynMgtQ,setDynMgtQ]=useState(null);
+      const [dynBranches,setDynBranches]=useState(null);
+      const [dynStaff,setDynStaff]=useState(null);
+      const [dynDC,setDynDC]=useState(null);
+      const [storageStatus,setStorageStatus]=useState(null);
+
+      function saveToCloud(key,data) {
+        try { localStorage.setItem(key,JSON.stringify(data)); } catch(e){console.error("儲存失敗",e);}
+      }
+      useState(()=>{
+        try {
+          const mR=localStorage.getItem("csi_main");
+          const dR=localStorage.getItem("csi_dc");
+          const sR=localStorage.getItem("csi_staff");
+          const tR=localStorage.getItem("csi_meta");
+          let loaded=false;
+          if(mR){const d=JSON.parse(mR);if(d.dealers)setDynDealers(d.dealers);if(d.kpi)setDynKpi(d.kpi);if(d.mgtQ)setDynMgtQ(d.mgtQ);if(d.branches)setDynBranches(d.branches);if(d.mainFiles)setMainFiles(d.mainFiles);loaded=true;}
+          if(dR){const d=JSON.parse(dR);setDynDC(d.dc);if(d.dcFiles)setDcFiles(d.dcFiles);loaded=true;}
+          if(sR){setDynStaff(JSON.parse(sR));loaded=true;}
+          if(tR){const m=JSON.parse(tR);if(m.dataTime)setDataTime(m.dataTime);}
+          if(loaded)setStorageStatus("loaded");
+        } catch(e){}
+      },[]);
+
+      const hasMain=dynKpi!==null, hasDC=dynDC!==null, hasStaff=dynStaff!==null;
+      const bdAlerts=useMemo(()=>calcAlerts(WEEKLY_DEF,"BD"),[]);
+      const zlAlerts=useMemo(()=>calcAlerts(WEEKLY_DEF,"ZL"),[]);
+      const BdDot=useMemo(()=>makeDot(bdAlerts,"#7c3aed"),[bdAlerts]);
+      const ZlDot=useMemo(()=>makeDot(zlAlerts,"#2563eb"),[zlAlerts]);
+
+      async function handleUpload(e,type) {
+        const file=e.target.files?.[0]; if(!file) return; e.target.value=null;
+        setUploadState(s=>({...s,[type]:"loading"}));
+        try {
+          const XLSX=await loadXLSX(), buf=await file.arrayBuffer(), wb=XLSX.read(buf,{type:"array"});
+          const now=new Date();
+          const nowStr=now.getFullYear()+"/"+String(now.getMonth()+1).padStart(2,"0")+"/"+String(now.getDate()).padStart(2,"0")+" "+String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+          setDataTime(nowStr);
+          if (type==="main") {
+            const sn=wb.SheetNames.find(n=>n.includes("各經銷及各廠成績")||n.includes("成績"))||wb.SheetNames[0];
+            const {dealers:nd,mgtScore,mgtSamples,mgtQRow,mBranches}=parseSummarySheet(wb.Sheets[sn]);
+            if (nd.length||mgtScore) {
+              const NM={M:"銘勁",S:"順怡",F:"豐展",R:"榮佑",Y:"億和",Z:"東正",J:"茂豐"};
+              const newD=[...nd.map(d=>({...d,name:NM[d.code]||d.code})),{name:"總代理",code:"MGT",score:mgtScore,samples:mgtSamples,isMGT:true}];
+              const mj=nd.find(d=>d.isMingJin);
+              const newKpi=mj?{overallScore:mj.score,mgtScore,totalSamples:mj.samples||0,mgtQRow,mBranches,mjQs:mj.qs}:null;
+              setDynDealers(newD); if(newKpi)setDynKpi(newKpi); if(mgtQRow)setDynMgtQ(mgtQRow); if(mBranches)setDynBranches(mBranches);
+              const nMF=[...mainFiles,file.name]; setMainFiles(nMF); setStorageStatus("saving");
+              saveToCloud("csi_main",{dealers:newD,kpi:newKpi,mgtQ:mgtQRow,branches:mBranches,mainFiles:nMF});
+            }
+            const dn=wb.SheetNames.find(n=>n.includes("車主明細")||n.includes("明細"))||null;
+            if (dn){const staff=parseDetailSheet(wb.Sheets[dn]);setDynStaff(staff);saveToCloud("csi_staff",staff);}
+          } else {
+            const recs=parseDCSheet(wb.Sheets[wb.SheetNames[0]]);
+            if (recs.length){const dcData=deriveDCStats(recs);setDynDC(dcData);const nDF=[...dcFiles,file.name];setDcFiles(nDF);setStorageStatus("saving");saveToCloud("csi_dc",{dc:dcData,dcFiles:nDF});}
+          }
+          saveToCloud("csi_meta",{dataTime:nowStr});
+          // 匯報寫入
+          try {
+            const nowD2=new Date(); const yr2=nowD2.getFullYear().toString(); const mo2=String(nowD2.getMonth()+1).padStart(2,'0');
+            const csiMain=JSON.parse(localStorage.getItem("csi_main")||"{}");
+            const kpi=csiMain.kpi||{};
+            const branches=csiMain.branches||[];
+            const mjScore=kpi.overallScore??null, mgtScoreVal=kpi.mgtScore??null;
+            const rank=(() => { try { const d=JSON.parse(localStorage.getItem("csi_main")||"{}"); const arr=(d.dealers||[]).filter(x=>!x.isMGT).sort((a,b)=>b.score-a.score); return arr.findIndex(x=>x.isMingJin)+1||null; } catch(e){return null;} })();
+            const staffData=JSON.parse(localStorage.getItem("csi_staff")||"null");
+            const lowQ11=staffData?Object.values(staffData).reduce((acc,f)=>acc+(f.lowQ11Records?.length||0),0):null;
+            const bdBranch=branches.find(b=>b.branch&&b.branch.includes("八德"));
+            const zlBranch=branches.find(b=>b.branch&&b.branch.includes("中壢"));
+            localStorage.setItem(`mj_csi_${yr2}_${mo2}`, JSON.stringify({
+              year:yr2, month:mo2,
+              score:mjScore, mgt:mgtScoreVal, rank,
+              bdScore:bdBranch?.score??null, zlScore:zlBranch?.score??null,
+              lowQ11Count:lowQ11,
+              qScores:kpi.mjQs??{},
+              mgtQScores:kpi.mgtQRow??{},
+              updatedAt:new Date().toISOString()
+            }));
+          } catch(e){console.error('CSI 匯報寫入失敗',e);}
+          setStorageStatus("saved"); setTimeout(()=>setStorageStatus(null),3000);
+          setUploadState(s=>({...s,[type]:"done"})); setTimeout(()=>setUploadState(s=>({...s,[type]:null})),3000);
+        } catch(err){console.error(err);setUploadState(s=>({...s,[type]:"error"}));setTimeout(()=>setUploadState(s=>({...s,[type]:null})),4000);}
+      }
+
+      const dealerRanked=useMemo(()=>{
+        if(!dynDealers) return [];
+        return [...dynDealers].filter(d=>!d.isMGT).sort((a,b)=>b.score-a.score).map((d,i)=>({...d,rank:i+1,label:"#"+(i+1)+" "+d.name+"("+d.code+")"}));
+      },[dynDealers]);
+      const mjRank=dealerRanked.find(d=>d.isMingJin)?.rank??"-";
+      const mgtDiff=hasMain?(dynKpi.overallScore-dynKpi.mgtScore).toFixed(0):0;
+      const isUp=hasMain&&dynKpi.overallScore>=dynKpi.mgtScore;
+      const bdWarnWeeks=WEEKLY_DEF.filter((_,i)=>bdAlerts[i]).map(d=>d.w);
+      const zlWarnWeeks=WEEKLY_DEF.filter((_,i)=>zlAlerts[i]).map(d=>d.w);
+      const mgtQ=dynMgtQ||MGT_Q;
+
+      function UploadBtn({type,label}) {
+        const s=uploadState[type], isMain=type==="main";
+        const iBg=isMain?"#fff5f5":"#eff6ff", iClr=isMain?"#b91c1c":"#1d4ed8", iBdr=isMain?"#fca5a5":"#bfdbfe";
+        return (
+          <label style={{cursor:"pointer"}}>
+            <input type="file" accept=".xls,.xlsx" style={{display:"none"}} onChange={e=>handleUpload(e,type)}/>
+            <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 12px",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer",
+              background:s==="loading"?"#f9fafb":s==="done"?"#f0fdf4":s==="error"?"#fef2f2":iBg,
+              color:s==="loading"?"#64748b":s==="done"?"#15803d":s==="error"?"#b91c1c":iClr,
+              border:"1px solid "+(s==="done"?"#bbf7d0":s==="error"?"#fecaca":iBdr)}}>
+              {s==="loading"?<><div style={{width:11,height:11,border:"2px solid #94a3b8",borderTopColor:"transparent",borderRadius:"50%",animation:"spin .8s linear infinite"}}/> 讀取中...</>
+              :s==="done"?<><CheckCircle2 size={12}/> 完成</>:s==="error"?<><AlertTriangle size={12}/> 失敗</>
+              :<>{isMain?<Upload size={12}/>:<Phone size={12}/>} {label}</>}
+            </div>
+          </label>
+        );
+      }
+
+      function TabBtn({id,label,icon,color}) {
+        const active = tab===id;
+        return <button onClick={()=>setTab(id)} style={{display:"flex",alignItems:"center",gap:6,padding:"10px 4px",
+          background:"transparent",border:"none",borderBottom: active?"2px solid #b91c1c":"2px solid transparent",
+          color:active?"#b91c1c":"#6b7280",fontWeight:active?700:400,fontSize:13,cursor:"pointer",
+          whiteSpace:"nowrap",transition:"all 0.15s"}}>{icon} {label}</button>;
+      }
+
+      function EmptyState({msg}) {
+        return <div style={{background:"#f9fafb",border:"1.5px dashed #d1d5db",borderRadius:12,padding:"40px 24px",textAlign:"center",color:"#9ca3af",fontSize:13}}><div style={{fontSize:32,marginBottom:10,opacity:0.4}}>📊</div><div>{msg}</div></div>;
+      }
+
+      function sampleBadge(n,mgtN) {
+        if(n==null||mgtN==null) return null; const t=Math.ceil(mgtN*0.15), ok=n>=t;
+        return {ok,label:ok?"達標 ("+t+")":"未達 ("+t+")"};
+      }
+      function scoreBadge(v) {
+        if(v==null) return null; const ok=parseFloat(v)>=910; return {ok,label:ok?"達標":"需改善"};
+      }
+
+      function ScoreSummaryTable() {
+        if(!hasMain) return null;
+        const mj=dynDealers?.find(d=>d.isMingJin), mjQs=mj?.qs||dynKpi?.mjQs||{};
+        const mgtN=dynDealers?.find(d=>d.isMGT)?.samples;
+        const bd=dynBranches?.find(b=>b.branch.includes("八德")), zl=dynBranches?.find(b=>b.branch.includes("中壢"));
+        const cols=[
+          {key:"mgt",label:"MGT 總代理 (基準)",icon:"🔲",isMgt:true,samples:mgtN,score:dynKpi.mgtScore,qs:mgtQ},
+          {key:"mj", label:"M 公司 (整體結果)",icon:"🔷",samples:dynKpi.totalSamples,score:dynKpi.overallScore,qs:mjQs},
+          {key:"zl", label:"中壢服務廠",       icon:"🔴",samples:zl?.samples,score:zl?.score,qs:zl?.qs||{}},
+          {key:"bd", label:"八德服務廠",       icon:"🔴",samples:bd?.samples,score:bd?.score,qs:bd?.qs||{}},
+        ];
+        return (
+          <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",overflow:"hidden",marginBottom:14}}>
+            <div style={{background:"#f8fafc",borderBottom:"1px solid #e5e7eb",padding:"12px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+              <span style={{fontWeight:700,fontSize:14,color:"#111827"}}>重點據點成績明細表</span>
+              <div style={{display:"flex",gap:14,fontSize:11,color:"#6b7280"}}>
+                <span>🔵 樣本數目標: MGT的 15%</span><span style={{color:"#15803d"}}>🟢 分數目標: 910分</span><span style={{color:"#dc2626"}}>🔴 紅字 = 低於 MGT</span>
+              </div>
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",fontSize:12,borderCollapse:"collapse",minWidth:700}}>
+                <thead>
+                  <tr style={{background:"#f9fafb",borderBottom:"1px solid #e5e7eb"}}>
+                    <th style={{padding:"9px 14px",textAlign:"left",fontSize:12,color:"#374151",fontWeight:600,minWidth:160}}>服務廠 / 層級</th>
+                    <th style={{padding:"9px 10px",textAlign:"center",fontSize:12,color:"#374151",fontWeight:600,minWidth:70}}>樣本數</th>
+                    <th style={{padding:"9px 10px",textAlign:"center",fontSize:12,color:"#374151",fontWeight:600,minWidth:80}}>新成績</th>
+                    {ALL_Q_KEYS.map(q=>(
+                      <th key={q} style={{padding:"6px 8px",textAlign:"center",fontSize:11,color:"#374151",fontWeight:600,minWidth:52}}>
+                        <div style={{fontWeight:700}}>{q}</div><div style={{fontSize:10,color:"#9ca3af",fontWeight:400}}>{Q_LABELS[q]}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {cols.map((c,ci)=>{
+                    const sb=sampleBadge(c.samples,mgtN), rb=c.isMgt?null:scoreBadge(c.score);
+                    const isMj=c.key==="mj", rowBg=c.isMgt?"#f9fafb":isMj?"#f0fdf4":"#fff";
+                    return (
+                      <tr key={ci} style={{borderBottom:"1px solid #f3f4f6",background:rowBg}}>
+                        <td style={{padding:"10px 14px",fontWeight:700,color:c.isMgt?"#374151":isMj?"#166534":"#111827"}}><span style={{marginRight:6}}>{c.icon}</span>{c.label}</td>
+                        <td style={{padding:"10px",textAlign:"center"}}>
+                          <div style={{fontWeight:700}}>{c.samples??"-"}</div>
+                          {sb&&!c.isMgt&&<div style={{fontSize:10,marginTop:2,color:sb.ok?"#15803d":"#dc2626",display:"flex",alignItems:"center",justifyContent:"center",gap:2}}>{sb.ok?"✅":"❌"} {sb.label}</div>}
+                        </td>
+                        <td style={{padding:"10px",textAlign:"center"}}>
+                          <div style={{fontWeight:900,fontSize:14,color:c.isMgt?"#374151":rb?.ok?"#166534":"#dc2626"}}>{c.score!=null?parseFloat(c.score).toFixed(1):"—"}</div>
+                          {rb&&<div style={{fontSize:10,marginTop:2,color:rb.ok?"#15803d":"#dc2626",display:"flex",alignItems:"center",justifyContent:"center",gap:2}}>{rb.ok?"✅":"❌"} {rb.label}</div>}
+                        </td>
+                        {ALL_Q_KEYS.map(q=>{
+                          const v=c.qs?.[q];
+                          if(v==null) return <td key={q} style={{padding:"8px 10px",textAlign:"center",color:"#d1d5db",fontSize:12}}>—</td>;
+                          const low=!c.isMgt&&parseFloat(v)<parseFloat(mgtQ[q]);
+                          return <td key={q} style={{padding:"8px 10px",textAlign:"center",fontSize:12,color:low?"#dc2626":"#374151",fontWeight:low?700:400}}>{parseFloat(v).toFixed(1)}</td>;
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      }
+
+      function DCAdvisorTable({factKey}) {
+        const th=FACTORY_THEME[factKey], fAdv=hasDC?dynDC.byAdvisor.filter(a=>a.factory===factKey):[];
+        return (
+          <div style={{marginBottom:4}}>
+            <div style={{background:th.hd,borderBottom:"1px solid "+th.hdBorder,borderTop:"1px solid "+th.hdBorder,padding:"8px 18px",display:"flex",alignItems:"center",gap:8}}>
+              <MapPin size={14} color={th.hdText}/><span style={{fontWeight:700,fontSize:13,color:th.hdText}}>{factKey}</span>
+            </div>
+            {fAdv.length===0?<div style={{padding:"12px 18px",fontSize:12,color:"#9ca3af"}}>無資料</div>:(
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",fontSize:12,borderCollapse:"collapse",minWidth:460}}>
+                  <thead><tr style={{background:"#f9fafb"}}>
+                    {["接待專員","責任件數","已完成","回填率","接通確認(參考)","接通率(參考)"].map(h=>(
+                      <th key={h} style={{padding:"7px 12px",textAlign:h==="接待專員"?"left":"center",fontSize:11,color:"#6b7280",fontWeight:500,borderBottom:"1px solid #f3f4f6",background:(h==="已完成"||h==="回填率")?"#fefce8":h.includes("參考")?"#f8fafc":""}}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {fAdv.map((a,i)=>{
+                      const fc=a.fillRate>=50?"#15803d":a.fillRate>=30?"#d97706":"#dc2626";
+                      const fb=a.fillRate>=50?"#f0fdf4":a.fillRate>=30?"#fefce8":"#fef2f2";
+                      return (
+                        <tr key={i} style={{borderBottom:"1px solid #f9fafb"}}>
+                          <td style={{padding:"9px 12px",fontWeight:700}}>{a.name}</td>
+                          <td style={{padding:"9px 12px",textAlign:"center"}}>{a.total}</td>
+                          <td style={{padding:"9px 12px",textAlign:"center",fontWeight:700,color:"#854d0e",background:"#fefce8"}}>{a.completed}</td>
+                          <td style={{padding:"9px 12px",textAlign:"center",background:"#fefce8"}}><span style={{background:fb,color:fc,fontWeight:700,padding:"3px 8px",borderRadius:6}}>{a.fillRate}%</span></td>
+                          <td style={{padding:"9px 12px",textAlign:"center",color:"#64748b",background:"#f8fafc"}}>{a.contacted}</td>
+                          <td style={{padding:"9px 12px",textAlign:"center",background:"#f8fafc"}}><span style={{color:"#64748b",fontSize:11}}>{a.contactRate}%</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      function FactoryStaffTable({factKey}) {
+        const th=FACTORY_THEME[factKey], dat=hasStaff?dynStaff[factKey]:null;
+        const advisors=dat?.advisors||[], techs=dat?.techs||[];
+        function PersonTable({people,respKeys,title}) {
+          const isAdv=respKeys===ADV_RESP;
+          return (
+            <>
+              <div style={{padding:"12px 18px 0",marginTop:4}}>
+                <div style={{fontWeight:600,fontSize:12,color:"#374151",display:"flex",alignItems:"center",gap:6,marginBottom:8,borderLeft:"3px solid "+(isAdv?th.accent:"#059669"),paddingLeft:8}}>
+                  {isAdv?<UserCheck size={13}/>:<Wrench size={13}/>} {title}
+                  <span style={{fontSize:11,color:"#6b7280",fontWeight:400}}>（責任題深色 / 非責任題灰色）</span>
+                </div>
+              </div>
+              {people.length===0?<div style={{padding:"8px 18px 12px",fontSize:12,color:"#9ca3af"}}>尚無資料，請上傳含「車主明細」工作表的 Excel</div>:(
+                <div style={{overflowX:"auto",paddingBottom:12}}>
+                  <table style={{width:"100%",fontSize:12,borderCollapse:"collapse",minWidth:660}}>
+                    <thead>
+                      <tr style={{background:"#f9fafb"}}>
+                        <th style={{padding:"8px 12px",textAlign:"left",fontSize:12,color:"#374151",fontWeight:600,borderBottom:"1px solid #f3f4f6",minWidth:80}}>姓名</th>
+                        <th style={{padding:"8px 10px",textAlign:"center",fontSize:12,color:"#374151",fontWeight:600,borderBottom:"1px solid #f3f4f6",background:"#fef2f2",minWidth:72}}><div>新成績</div><div style={{fontSize:9,color:"#9ca3af",fontWeight:400}}>F×G×10</div></th>
+                        <th style={{padding:"8px 10px",textAlign:"center",fontSize:12,color:"#374151",fontWeight:600,borderBottom:"1px solid #f3f4f6",background:"#fefce8",minWidth:60}}>樣本數</th>
+                        {ALL_Q_KEYS.map(q=>{const isR=respKeys.includes(q);return(
+                          <th key={q} style={{padding:"6px 8px",textAlign:"center",fontSize:11,borderBottom:"1px solid #f3f4f6",minWidth:52,color:isR?"#374151":"#9ca3af",fontWeight:isR?600:400,background:isR?"":"#f9fafb"}}>
+                            <div style={{fontWeight:isR?700:400}}>{q}</div><div style={{fontSize:9,fontWeight:400,color:isR?"#9ca3af":"#d1d5db"}}>{Q_LABELS[q]}</div>
+                          </th>);})}
+                      </tr>
+                      <tr style={{background:"#f9fafb",borderBottom:"1px solid #e5e7eb"}}>
+                        <td style={{padding:"5px 12px",fontSize:10,color:"#9ca3af",fontStyle:"italic"}}>MGT均值</td>
+                        <td style={{padding:"5px 10px",textAlign:"center",fontSize:11,fontWeight:700,color:"#374151",background:"#fef2f2",fontStyle:"italic"}}>{dynKpi?.mgtScore?.toFixed(1)??"—"}</td>
+                        <td style={{background:"#fefce8"}}/>
+                        {ALL_Q_KEYS.map(q=>{const isR=respKeys.includes(q);return <td key={q} style={{padding:"4px 8px",textAlign:"center",fontSize:10,fontStyle:"italic",color:isR?"#9ca3af":"#d1d5db",background:isR?"":"#f9fafb"}}>{isR?mgtQ[q].toFixed(1):"—"}</td>;})}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {people.map((p,i)=>{
+                        const mB=dynKpi?.mgtScore??900, sLow=p.newScore!=null&&p.newScore<mB;
+                        return(
+                          <tr key={i} style={{borderBottom:"1px solid #f9fafb"}}>
+                            <td style={{padding:"9px 12px",fontWeight:700,color:"#111827"}}>{p.name}</td>
+                            <td style={{padding:"9px 10px",textAlign:"center",background:"#fef2f2"}}>
+                              <div style={{fontWeight:900,fontSize:14,color:p.newScore==null?"#d1d5db":sLow?"#dc2626":"#166534"}}>{p.newScore!=null?p.newScore.toFixed(1):"—"}</div>
+                              {p.newScore!=null&&<div style={{fontSize:10,marginTop:1,color:sLow?"#dc2626":"#15803d",display:"flex",alignItems:"center",justifyContent:"center",gap:2}}>{sLow?"❌ 低於MGT":"✅ 達標"}</div>}
+                            </td>
+                            <td style={{padding:"9px 10px",textAlign:"center",fontWeight:700,color:"#854d0e",background:"#fefce8"}}>{p.samples}</td>
+                            {ALL_Q_KEYS.map(q=>{const isR=respKeys.includes(q),v=p.qScores?.[q],low=isR&&v!==undefined&&v<mgtQ[q];
+                              return <td key={q} style={{padding:"9px 8px",textAlign:"center",background:isR?"":"#f9fafb",color:v===undefined?"#d1d5db":!isR?"#9ca3af":low?"#dc2626":"#374151",fontWeight:low?700:400}}>{v!==undefined?parseFloat(v).toFixed(1):"—"}</td>;
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          );
+        }
+        return (
+          <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",overflow:"hidden",marginBottom:14}}>
+            <div style={{background:th.hd,borderBottom:"1px solid "+th.hdBorder,padding:"10px 18px",display:"flex",alignItems:"center",gap:8}}>
+              <MapPin size={15} color={th.hdText}/><span style={{fontWeight:700,fontSize:14,color:th.hdText}}>{factKey} — 服務人員成績</span>
+            </div>
+            <PersonTable people={advisors} respKeys={ADV_RESP} title="接待專員"/>
+            <div style={{height:1,background:"#f3f4f6",margin:"0 18px"}}/>
+            <PersonTable people={techs} respKeys={TECH_RESP} title="技師"/>
+          </div>
+        );
+      }
+
+      return (
+        <div style={{background:"#f3f4f6",minHeight:"100vh",fontFamily:"'Segoe UI','Microsoft JhengHei',sans-serif"}}>
+          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+
+          {/* 方案 A 標題區 */}
+          <div className="page-header">
+            <div className="breadcrumb">顧關部 / CSI 滿意度</div>
+            <div className="title-row">
+              <div className="red-accent"></div>
+              <div>
+                <h1>CSI 服務部滿意度</h1>
+                <div className="subtitle">銘勁汽車 (桃園區) · {dataTime?"最新資料："+dataTime:"尚未上傳資料，請匯入 Excel 以顯示數據"}</div>
+              </div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:10,marginLeft:13,flexWrap:"wrap"}}>
+              {/* SP 同步年月 */}
+              <select id="csi-sp-year" style={{fontSize:12,padding:"4px 8px",borderRadius:6,border:"1px solid #e5e7eb",background:"#f9fafb",color:"#374151",fontFamily:"inherit"}}>
+                {[2026,2025].map(y=><option key={y} value={y}>{y}年</option>)}
+              </select>
+              <select id="csi-sp-month" style={{fontSize:12,padding:"4px 8px",borderRadius:6,border:"1px solid #e5e7eb",background:"#f9fafb",color:"#374151",fontFamily:"inherit"}}>
+                {Array.from({length:12},(_,i)=>i+1).map(m=><option key={m} value={String(m).padStart(2,'0')} selected={m===new Date().getMonth()+1}>{m}月</option>)}
+              </select>
+              <button style={{fontSize:12,padding:"4px 12px",borderRadius:6,border:"1px solid #6ee7b7",background:"#f0fdf4",color:"#065f46",cursor:"pointer",fontFamily:"inherit"}}
+                onClick={async()=>{
+                  const y=document.getElementById('csi-sp-year').value;
+                  const m=document.getElementById('csi-sp-month').value;
+                  setStorageStatus("saving");
+                  try{
+                    const spUrl=`https://fetcb107004.sharepoint.com/sites/customer-/Shared%20Documents/AI%E6%93%B7%E5%8F%96%E8%B3%87%E6%96%99/%E9%A1%A7%E5%AE%A2%E6%BB%BF%E6%84%8F/%E6%9C%8D%E5%8B%99%E9%83%A8CSI%E6%BB%BF%E6%84%8F%E5%BA%A6/MG-CSI%E5%90%84%E5%BB%A0%E6%AF%8F%E6%9C%88%E6%88%90%E7%B8%BE%E8%A1%A8/MG-CSI%E5%90%84%E5%BB%A0%E6%AF%8F%E6%9C%88%E6%88%90%E7%B8%BE%E8%A1%A8${y}${m}%E6%9C%88M-%E7%94%B3%E8%A8%B4.xls`;
+                    const res=await fetch(spUrl,{credentials:'include'});
+                    if(res.status===401||res.status===403)throw new Error('請先登入 O365（office.com）再重試');
+                    if(res.status===404)throw new Error(`找不到 ${y}年${m}月 的 CSI 月報`);
+                    if(!res.ok)throw new Error('HTTP '+res.status);
+                    const buf=await res.arrayBuffer();
+                    const fakeFile=new File([buf],`MG-CSI各廠每月成績表${y}${m}月M-申訴.xls`);
+                    const fakeEv={target:{files:[fakeFile],value:''}};
+                    await handleUpload(fakeEv,"main");
+                  }catch(e){setStorageStatus(null);alert('SharePoint 同步失敗：'+e.message);}
+                }}>🔗 SharePoint 同步</button>
+              <UploadBtn type="main" label="📤 手動匯入報表"/>
+              <UploadBtn type="dc"   label="匯入 DC 電訪記錄"/>
+              {storageStatus==="saved"&&<span style={{fontSize:11,color:"#15803d",background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"3px 8px",borderRadius:5}}>✅ 已儲存</span>}
+              {storageStatus==="loaded"&&<span style={{fontSize:11,color:"#1d4ed8",background:"#eff6ff",border:"1px solid #bfdbfe",padding:"3px 8px",borderRadius:5}}>☁️ 已載入雲端資料</span>}
+              {(mainFiles.length>0||dcFiles.length>0)&&(
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {mainFiles.map((f,i)=><span key={i} style={{fontSize:10,background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",padding:"2px 7px",borderRadius:4}}>{f}</span>)}
+                  {dcFiles.map((f,i)=><span key={i} style={{fontSize:10,background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1d4ed8",padding:"2px 7px",borderRadius:4}}>{f}</span>)}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div style={{background:"white",borderBottom:"1px solid #e5e7eb",padding:"0 24px",display:"flex",gap:20,overflowX:"auto"}}>
+            <TabBtn id="summary" label="成績與排名總覽" icon={<LayoutDashboard size={14}/>} color="#1f2937"/>
+            <TabBtn id="dc"      label="DC 電訪分析"   icon={<Phone size={14}/>}           color="#0369a1"/>
+            <TabBtn id="zhongli" label="中壢廠表現"     icon={<MapPin size={14}/>}          color="#2563eb"/>
+            <TabBtn id="bade"    label="八德廠表現"     icon={<MapPin size={14}/>}          color="#7c3aed"/>
+          </div>
+
+          <div style={{background:"#f3f4f6",minHeight:"calc(100vh - 120px)",padding:"20px 0 60px"}}>
+
+            {/* 總覽 */}
+            {tab==="summary"&&(
+              <div style={{maxWidth:"1400px",margin:"0 auto",padding:"0 24px",display:"flex",flexDirection:"column",gap:14}}>
+                {!hasMain?<EmptyState msg="請上傳「總代理報表」Excel 以顯示 CSI 成績數據"/>:(
+                  <>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
+                      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:"16px 18px"}}>
+                        <div style={{fontSize:11,color:"#6b7280",fontWeight:500}}>銘勁新成績</div>
+                        <div style={{fontSize:32,fontWeight:900,color:"#111827",lineHeight:1.1,marginTop:3}}>{dynKpi.overallScore.toFixed(2)}</div>
+                        <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+                          <span style={{background:"#eff6ff",color:"#1d4ed8",fontSize:11,fontWeight:700,padding:"2px 7px",borderRadius:5,display:"flex",alignItems:"center",gap:3}}><Medal size={11}/> 第{mjRank}名</span>
+                          <span style={{background:isUp?"#dcfce7":"#fee2e2",color:isUp?"#15803d":"#b91c1c",fontSize:11,fontWeight:700,padding:"2px 7px",borderRadius:5}}>{isUp?"▲":"▼"} MGT {Math.abs(mgtDiff)}</span>
+                        </div>
+                      </div>
+                      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:"16px 18px"}}>
+                        <div style={{fontSize:11,color:"#6b7280"}}>有效問卷樣本</div>
+                        <div style={{fontSize:32,fontWeight:900,color:"#111827",lineHeight:1.1,marginTop:3}}>{dynKpi.totalSamples}<span style={{fontSize:14,fontWeight:400,color:"#9ca3af"}}> 份</span></div>
+                      </div>
+                      {hasDC&&(<>
+                        <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:"16px 18px"}}>
+                          <div style={{fontSize:11,color:"#6b7280"}}>DC 電訪案件</div>
+                          <div style={{fontSize:32,fontWeight:900,color:"#111827",lineHeight:1.1,marginTop:3}}>{dynDC.summary.totalCases}<span style={{fontSize:14,fontWeight:400,color:"#9ca3af"}}> 件</span></div>
+                        </div>
+                        <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:"16px 18px"}}>
+                          <div style={{fontSize:11,color:"#6b7280"}}>電訪接通率</div>
+                          <div style={{fontSize:32,fontWeight:900,lineHeight:1.1,marginTop:3,color:dynDC.summary.contactRate>=60?"#15803d":dynDC.summary.contactRate>=45?"#d97706":"#dc2626"}}>{dynDC.summary.contactRate}%</div>
+                        </div>
+                      </>)}
+                    </div>
+
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:"16px 18px"}}>
+                        <div style={{fontWeight:700,fontSize:14,marginBottom:6,paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>全台經銷商排名</div>
+                        <div style={{fontSize:11,color:"#6b7280",marginBottom:10}}>MGT 均值 {dynKpi.mgtScore}　紅色 = 銘勁</div>
+                        <ResponsiveContainer width="100%" height={240}>
+                          <BarChart data={dealerRanked} layout="vertical" margin={{top:0,right:32,left:8,bottom:0}}>
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f3f4f6"/>
+                            <XAxis type="number" domain={[800,1050]} tick={{fontSize:10,fill:"#9ca3af"}}/>
+                            <YAxis dataKey="label" type="category" tick={{fontSize:11,fill:"#374151",fontWeight:600}} width={115}/>
+                            <Tooltip contentStyle={{borderRadius:10,border:"none"}} formatter={v=>[v,"新成績"]}/>
+                            <ReferenceLine x={dynKpi.mgtScore} stroke="#94a3b8" strokeDasharray="4 3" strokeWidth={1.5} label={{value:"MGT "+dynKpi.mgtScore,position:"top",fill:"#64748b",fontSize:10}}/>
+                            <Bar dataKey="score" radius={[0,4,4,0]} barSize={20}>{dealerRanked.map((d,i)=><Cell key={i} fill={d.isMingJin?"#dc2626":"#e2e8f0"}/>)}</Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:"16px 18px"}}>
+                        <div style={{fontWeight:700,fontSize:14,marginBottom:6,paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>各題服務流程對比</div>
+                        <div style={{fontSize:11,color:"#6b7280",marginBottom:4}}>銘勁(M)、中壢廠、八德廠 vs MGT</div>
+                        {(()=>{
+                          const mj=dynDealers?.find(d=>d.isMingJin), mjQs=mj?.qs||dynKpi?.mjQs||{};
+                          const bd=dynBranches?.find(b=>b.branch.includes("八德")), zl=dynBranches?.find(b=>b.branch.includes("中壢"));
+                          const rd=ALL_Q_KEYS.map(q=>({q,MGT:mgtQ[q],M:mjQs[q],中壢:zl?.qs?.[q],八德:bd?.qs?.[q]}));
+                          return <ResponsiveContainer width="100%" height={240}>
+                            <RadarChart cx="50%" cy="48%" outerRadius="70%" data={rd}>
+                              <PolarGrid stroke="#e5e7eb"/>
+                              <PolarAngleAxis dataKey="q" tick={{fill:"#4b5563",fontSize:10,fontWeight:500}}/>
+                              <PolarRadiusAxis angle={90} domain={[92,100]} tick={{fill:"#9ca3af",fontSize:9}} tickCount={3}/>
+                              <Radar name="MGT均值" dataKey="MGT" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3" fill="#94a3b8" fillOpacity={0.05}/>
+                              <Radar name="銘勁(M)" dataKey="M"   stroke="#dc2626" strokeWidth={2}   fill="#dc2626" fillOpacity={0.08}/>
+                              <Radar name="中壢廠"  dataKey="中壢" stroke="#2563eb" strokeWidth={1.5} fill="#2563eb" fillOpacity={0.08}/>
+                              <Radar name="八德廠"  dataKey="八德" stroke="#7c3aed" strokeWidth={1.5} fill="#7c3aed" fillOpacity={0.08}/>
+                              <Legend wrapperStyle={{fontSize:11,paddingTop:4}}/>
+                              <Tooltip contentStyle={{borderRadius:10,border:"none",fontSize:12}}/>
+                            </RadarChart>
+                          </ResponsiveContainer>;
+                        })()}
+                      </div>
+                    </div>
+
+                    <ScoreSummaryTable/>
+
+                    <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:"16px 18px"}}>
+                      <div style={{fontWeight:700,fontSize:14,marginBottom:6,paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>逐週 CSI 趨勢</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:12,marginBottom:8,fontSize:11,color:"#6b7280"}}>
+                        {[{c:"#dc2626",l:"銘勁全區"},{c:"#2563eb",l:"中壢廠"},{c:"#7c3aed",l:"八德廠"},{c:"#94a3b8",l:"MGT均值"}].map((x,i)=>(
+                          <span key={i} style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:16,height:3,background:x.c,display:"inline-block",borderRadius:2}}/>{x.l}</span>
+                        ))}
+                        <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:12,height:12,background:"#fef2f2",border:"1.5px solid #dc2626",borderRadius:"50%",display:"inline-block"}}/>連續2週未達910警示</span>
+                      </div>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <LineChart data={WEEKLY_DEF} margin={{top:8,right:32,left:-10,bottom:0}}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6"/>
+                          <XAxis dataKey="w" tick={{fontSize:11,fill:"#9ca3af"}}/>
+                          <YAxis domain={[750,1010]} tick={{fontSize:10,fill:"#9ca3af"}}/>
+                          <Tooltip contentStyle={{borderRadius:10,border:"none"}}/>
+                          <ReferenceLine y={910} stroke="#f59e0b" strokeDasharray="5 3" strokeWidth={1.5} label={{value:"目標910",position:"right",fill:"#d97706",fontSize:10}}/>
+                          <ReferenceLine y={900} stroke="#94a3b8" strokeDasharray="4 3" strokeWidth={1} label={{value:"MGT",position:"right",fill:"#94a3b8",fontSize:10}}/>
+                          <Line dataKey="M"   name="銘勁全區" stroke="#dc2626" strokeWidth={2.5} dot={{r:3}} activeDot={{r:5}}/>
+                          <Line dataKey="ZL"  name="中壢廠"   stroke="#2563eb" strokeWidth={2}   dot={<ZlDot/>} activeDot={{r:5}}/>
+                          <Line dataKey="BD"  name="八德廠"   stroke="#7c3aed" strokeWidth={2}   dot={<BdDot/>} activeDot={{r:5}}/>
+                          <Line dataKey="MGT" name="MGT均值"  stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3" dot={false}/>
+                        </LineChart>
+                      </ResponsiveContainer>
+                      {(bdWarnWeeks.length>0||zlWarnWeeks.length>0)&&(
+                        <div style={{marginTop:10,background:"#fef2f2",border:"1px solid #fecaca",borderRadius:8,padding:"8px 14px"}}>
+                          <div style={{fontWeight:700,fontSize:12,color:"#991b1b",marginBottom:4,display:"flex",alignItems:"center",gap:5}}><AlertTriangle size={13}/> 連續未達標警示（910分以下連續2週以上）</div>
+                          {bdWarnWeeks.length>0&&<div style={{fontSize:11,color:"#5b21b6"}}>⚠ 八德廠：{bdWarnWeeks.join("、")}</div>}
+                          {zlWarnWeeks.length>0&&<div style={{fontSize:11,color:"#1d4ed8",marginTop:2}}>⚠ 中壢廠：{zlWarnWeeks.join("、")}</div>}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* DC 電訪 */}
+            {tab==="dc"&&(
+              <div style={{maxWidth:"1400px",margin:"0 auto",padding:"0 24px",display:"flex",flexDirection:"column",gap:14}}>
+                {!hasDC?<EmptyState msg="請上傳「DC 電訪記錄」Excel 以顯示電訪分析數據"/>:(
+                  <>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10}}>
+                      {[
+                        {label:"總電訪案件",val:dynDC.summary.totalCases,unit:"件",color:"#374151"},
+                        {label:"已接通",    val:dynDC.summary.contacted,  unit:"件",color:"#15803d"},
+                        {label:"未接通",    val:dynDC.summary.notContacted,unit:"件",color:"#dc2626"},
+                        {label:"接通率",    val:dynDC.summary.contactRate+"%",color:dynDC.summary.contactRate>=60?"#15803d":dynDC.summary.contactRate>=45?"#d97706":"#dc2626"},
+                        {label:"狀況良好",  val:dynDC.summary.confirmedGood,unit:"件",color:"#15803d"},
+                        {label:"需重修",    val:dynDC.summary.needRework,  unit:"件",color:"#ea580c"},
+                      ].map((c,i)=>(
+                        <div key={i} style={{background:"#fff",borderRadius:10,border:"1px solid #e5e7eb",padding:"12px 14px"}}>
+                          <div style={{fontSize:11,color:"#6b7280"}}>{c.label}</div>
+                          <div style={{fontSize:26,fontWeight:900,color:c.color,lineHeight:1.2,marginTop:2}}>{c.val}<span style={{fontSize:12,fontWeight:400,color:"#9ca3af"}}>{c.unit||""}</span></div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:"14px 18px 0"}}>
+                      <div style={{fontWeight:700,fontSize:14,color:"#111827",paddingLeft:"10px",borderLeft:"3px solid #b91c1c",display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                        <Phone size={16}/> 接待專員電訪績效 — 問卷回填率
+                        <span style={{fontSize:11,color:"#0369a1",background:"#e0f2fe",padding:"3px 10px",borderRadius:6,fontWeight:500}}>回填率 = 已完成 ÷ 責任件數</span>
+                      </div>
+                      <DCAdvisorTable factKey="中壢廠"/>
+                      <div style={{height:1,background:"#e5e7eb",margin:"4px 0"}}/>
+                      <DCAdvisorTable factKey="八德廠"/>
+                      <div style={{margin:"10px 0 14px",background:"#fefce8",border:"1px solid #fde68a",borderRadius:8,padding:"7px 12px",fontSize:11,color:"#6b7280"}}>
+                        💡 <strong>問卷回填率</strong> = DC「已完成」件數 ÷ 責任件數。接通確認為參考，不列入計算。
+                      </div>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:"16px 18px"}}>
+                        <div style={{fontWeight:700,fontSize:14,marginBottom:12,paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>廠區接通率比較　目標：60%</div>
+                        <ResponsiveContainer width="100%" height={160}>
+                          <BarChart data={dynDC.byFactory} margin={{top:4,right:16,left:-20,bottom:0}}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6"/>
+                            <XAxis dataKey="name" tick={{fontSize:12,fill:"#374151"}}/>
+                            <YAxis domain={[0,100]} tick={{fontSize:10,fill:"#9ca3af"}}/>
+                            <Tooltip formatter={v=>[v+"%","接通率"]} contentStyle={{borderRadius:10,border:"none"}}/>
+                            <ReferenceLine y={60} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1.5} label={{value:"目標60%",position:"right",fill:"#d97706",fontSize:10}}/>
+                            <Bar dataKey="contactRate" radius={[6,6,0,0]} barSize={50}>{dynDC.byFactory.map((d,i)=><Cell key={i} fill={d.contactRate>=60?"#16a34a":d.contactRate>=45?"#f59e0b":"#dc2626"}/>)}</Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:"16px 18px"}}>
+                        <div style={{fontWeight:700,fontSize:14,marginBottom:8,paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>電訪結果分佈</div>
+                        <ResponsiveContainer width="100%" height={160}>
+                          <PieChart>
+                            <Pie data={[{name:"已接通 "+dynDC.summary.contacted+"件",value:dynDC.summary.contacted},{name:"未接通 "+dynDC.summary.notContacted+"件",value:dynDC.summary.notContacted}]} cx="50%" cy="50%" outerRadius={60} dataKey="value">
+                              <Cell fill="#16a34a"/><Cell fill="#e2e8f0"/>
+                            </Pie>
+                            <Tooltip contentStyle={{borderRadius:10,border:"none"}}/>
+                            <Legend wrapperStyle={{fontSize:12}}/>
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                    <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:"16px 18px"}}>
+                      <div style={{fontWeight:700,fontSize:14,marginBottom:10,display:"flex",alignItems:"center",gap:8}}><AlertTriangle size={16} color="#dc2626"/> 本月異常記錄與顧客反應事項</div>
+                      <div style={{overflowX:"auto"}}>
+                        <table style={{width:"100%",fontSize:12,borderCollapse:"collapse"}}>
+                          <thead><tr style={{background:"#fef2f2"}}>{["日期","客戶","車號","廠區","接待","狀況說明","結果"].map(h=><th key={h} style={{padding:"7px 10px",textAlign:"left",fontSize:11,color:"#991b1b",fontWeight:600,borderBottom:"1px solid #fecaca"}}>{h}</th>)}</tr></thead>
+                          <tbody>
+                            {dynDC.issues.map((d,i)=>(
+                              <tr key={i} style={{borderBottom:"1px solid #fef2f2"}}>
+                                <td style={{padding:"8px 10px",color:"#6b7280"}}>{d.date}</td>
+                                <td style={{padding:"8px 10px",fontWeight:600}}>{d.cust}</td>
+                                <td style={{padding:"8px 10px",color:"#6b7280"}}>{d.car}</td>
+                                <td style={{padding:"8px 10px",color:"#6b7280"}}>{d.factory}</td>
+                                <td style={{padding:"8px 10px",fontWeight:600}}>{d.advisor}</td>
+                                <td style={{padding:"8px 10px",maxWidth:260,color:"#374151"}}>{(d.issue||"").slice(0,55)}{(d.issue||"").length>55?"...":""}</td>
+                                <td style={{padding:"8px 10px"}}><span style={{background:["需重修","問題車","客訴"].includes(d.result)?"#fef2f2":"#f0fdf4",color:["需重修","問題車","客訴"].includes(d.result)?"#dc2626":"#15803d",fontSize:11,fontWeight:700,padding:"2px 7px",borderRadius:5}}>{d.result||"客訴"}</span></td>
+                              </tr>
+                            ))}
+                            {dynDC.issues.length===0&&<tr><td colSpan={7} style={{textAlign:"center",padding:"20px",color:"#9ca3af"}}>本月無異常記錄</td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* 廠區頁 */}
+            {(tab==="bade"||tab==="zhongli")&&(()=>{
+              const _maxWrap={maxWidth:"1400px",margin:"0 auto",padding:"0 24px"};
+              const isBade=tab==="bade", factKey=isBade?"八德廠":"中壢廠", fname=isBade?"八德服務廠":"中壢服務廠";
+              const th=FACTORY_THEME[factKey];
+              const bd=dynBranches?.find(b=>b.branch.includes("八德")), zl=dynBranches?.find(b=>b.branch.includes("中壢"));
+              const brData=isBade?bd:zl;
+              const fQ=brData?ALL_Q_KEYS.map(q=>({q:q+" "+Q_LABELS[q],score:brData.qs?.[q],mgt:mgtQ[q]})):[];
+              return (
+                <div style={{maxWidth:"1400px",margin:"0 auto",padding:"0 24px",display:"flex",flexDirection:"column",gap:14}}>
+                  {!hasMain?<EmptyState msg="請上傳「總代理報表」Excel 以顯示廠區表現數據"/>:(
+                    <>
+                      <FactoryStaffTable factKey={factKey}/>
+                      {(()=>{
+                        const recs=dynStaff?.[factKey]?.lowQ11Records||[];
+                        return (
+                          <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",overflow:"hidden"}}>
+                            <div style={{background:"#fef2f2",borderBottom:"1px solid #fecaca",padding:"10px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+                              <div style={{fontWeight:700,fontSize:14,color:"#991b1b",display:"flex",alignItems:"center",gap:8}}><AlertTriangle size={16}/> Q11 整體滿意度低分明細（低於 8 分）</div>
+                              <span style={{background:"#dc2626",color:"#fff",fontSize:12,fontWeight:700,padding:"2px 10px",borderRadius:20}}>{recs.length} 筆</span>
+                            </div>
+                            {recs.length===0?(
+                              <div style={{padding:"24px",textAlign:"center",color:"#9ca3af",fontSize:13}}>{hasStaff?"本期無 Q11 低於 8 分之紀錄 🎉":"尚無資料，請上傳含「車主明細」工作表的 Excel"}</div>
+                            ):(
+                              <div style={{overflowX:"auto"}}>
+                                <table style={{width:"100%",fontSize:12,borderCollapse:"collapse",minWidth:700}}>
+                                  <thead><tr style={{background:"#fef2f2"}}>{["客戶","車號","接待","技師","Q2","Q3","Q4","Q5","Q6","Q7","Q8","Q9","Q10","Q11"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:["客戶","接待","技師"].includes(h)?"left":"center",fontSize:11,color:"#991b1b",fontWeight:600,borderBottom:"1px solid #fecaca",background:h==="Q11"?"#fee2e2":""}}>{h}</th>)}</tr></thead>
+                                  <tbody>
+                                    {recs.map((rec,i)=>(
+                                      <tr key={i} style={{borderBottom:"1px solid #fef2f2",background:i%2===0?"#fff":"#fff9f9"}}>
+                                        <td style={{padding:"9px 10px",fontWeight:600,color:"#374151"}}>{rec.custName||"—"}</td>
+                                        <td style={{padding:"9px 10px",color:"#6b7280",fontFamily:"monospace",fontSize:11}}>{rec.carNo||"—"}</td>
+                                        <td style={{padding:"9px 10px",color:"#374151"}}>{rec.advisor||"—"}</td>
+                                        <td style={{padding:"9px 10px",color:"#374151"}}>{rec.tech||"—"}</td>
+                                        {ALL_Q_KEYS.map(q=>{const v=rec.scores[q],isQ11=q==="Q11",isLow=v!==undefined&&v<(isQ11?8:9);return <td key={q} style={{padding:"9px 10px",textAlign:"center",background:isQ11?"#fee2e2":"",color:v===undefined?"#d1d5db":isLow?"#dc2626":"#374151",fontWeight:isLow?700:400}}>{v!==undefined?v:"—"}</td>;})}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                      {fQ.length>0&&(
+                        <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:"16px 18px"}}>
+                          <div style={{fontWeight:700,fontSize:14,marginBottom:6,paddingLeft:"10px",borderLeft:"3px solid #b91c1c"}}>各題平均分 vs MGT 基準</div>
+                          <div style={{fontSize:11,color:"#6b7280",marginBottom:12}}>{fname}　目標：全面超越 MGT</div>
+                          <ResponsiveContainer width="100%" height={200}>
+                            <BarChart data={fQ} margin={{top:4,right:16,left:-20,bottom:0}}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6"/>
+                              <XAxis dataKey="q" tick={{fontSize:9,fill:"#6b7280"}} angle={-15} textAnchor="end" height={40}/>
+                              <YAxis domain={[88,102]} tick={{fontSize:10,fill:"#9ca3af"}}/>
+                              <Tooltip contentStyle={{borderRadius:10,border:"none"}}/>
+                              <Bar dataKey="score" name="廠區均分" radius={[4,4,0,0]} barSize={22}>{fQ.map((d,i)=><Cell key={i} fill={d.score!=null&&d.score>=d.mgt?th.accent:"#fca5a5"}/>)}</Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                          <div style={{fontSize:11,color:"#6b7280",marginTop:8,display:"flex",gap:12}}>
+                            <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:10,height:10,background:th.accent,borderRadius:2,display:"inline-block"}}/> 超越 MGT</span>
+                            <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:10,height:10,background:"#fca5a5",borderRadius:2,display:"inline-block"}}/> 低於 MGT</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

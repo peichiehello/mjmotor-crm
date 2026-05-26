@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>車美部業績明細 - 銘勁汽車</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background: #f3f4f6; margin: 0; }
+
+        .page-header { background: white; border-bottom: 1px solid #e5e7eb; padding: 14px 24px; position: sticky; top: 0; z-index: 50; }
+        .breadcrumb { font-size: 11px; color: #9ca3af; margin-bottom: 6px; }
+        .breadcrumb a { color: #9ca3af; text-decoration: none; }
+        .breadcrumb a:hover { color: #b91c1c; }
+        .title-row { display: flex; align-items: flex-start; gap: 10px; }
+        .red-accent { width: 3px; min-height: 22px; background: #b91c1c; border-radius: 2px; margin-top: 2px; flex-shrink: 0; }
+        .toolbar { display: flex; align-items: center; gap: 8px; margin-top: 10px; margin-left: 13px; flex-wrap: wrap; }
+        .btn { font-size: 12px; padding: 4px 12px; border-radius: 6px; border: 1px solid #e5e7eb; background: #f9fafb; color: #374151; cursor: pointer; font-family: inherit; }
+        .btn:hover { background: #f3f4f6; }
+        .btn-red { border-color: #b91c1c; background: #fff1f2; color: #b91c1c; }
+        .btn-red:hover { background: #ffe4e6; }
+        .file-badge { font-size: 11px; padding: 3px 8px; border-radius: 6px; background: #dcfce7; color: #166534; }
+
+        /* Summary */
+        .summary-row { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+        .scard { background: white; border-radius: 10px; padding: 14px 16px; border: 1px solid #e5e7eb; }
+        .scard-label { font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .4px; }
+        .scard-val { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+        .scard-meta { display: flex; gap: 16px; font-size: 11px; color: #6b7280; }
+        .scard-meta strong { color: #374151; }
+
+        /* Target */
+        .target-row { background: white; border-radius: 10px; padding: 14px 16px; border: 1px solid #e5e7eb; margin-bottom: 14px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+        .target-label { font-size: 11px; font-weight: 600; color: #6b7280; white-space: nowrap; }
+        .target-input { font-size: 15px; font-weight: 700; padding: 4px 10px; border: 1.5px solid #d1d5db; border-radius: 6px; width: 130px; font-family: inherit; color: #111827; text-align: right; }
+        .target-input:focus { outline: none; border-color: #b91c1c; box-shadow: 0 0 0 2px #fee2e2; }
+        .achieve-wrap { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 200px; }
+        .achieve-pct { font-size: 24px; font-weight: 800; min-width: 56px; }
+        .achieve-info { flex: 1; }
+        .achieve-detail { font-size: 11px; color: #6b7280; margin-bottom: 4px; }
+        .bar-bg { height: 8px; background: #f3f4f6; border-radius: 4px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 4px; transition: width .5s ease; }
+
+        /* Tables */
+        .tables-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+        .tpanel { background: white; border-radius: 10px; border: 1px solid #e5e7eb; overflow: hidden; }
+        .tpanel-hd { padding: 9px 14px; font-size: 13px; font-weight: 700; border-bottom: 1px solid; text-align: center; letter-spacing: 0.5px; }
+        .tpanel-hd.blue  { background: #e8edf5; color: #374151; border-color: #c5d0e0; }
+        .tpanel-hd.green { background: #e8f0ec; color: #374151; border-color: #bfd4c8; }
+
+        table.t { border-collapse: collapse; width: 100%; font-size: 12px; table-layout: fixed; }
+        table.t th { font-weight: 700; font-size: 11px; padding: 6px 8px; text-align: center; white-space: nowrap; }
+        table.t th.b { background: #6b84a8; color: white; border: 1px solid #5a7090; }
+        table.t th.g { background: #6a9480; color: white; border: 1px solid #577d6b; }
+        table.t td { padding: 5px 8px; border: 1px solid #e2e8f0; text-align: center; vertical-align: middle; white-space: nowrap; }
+
+        /* 營業部 色彩層次（藍灰色系） */
+        .td-site-b   { background: #7b94b8; color: white; font-weight: 700; font-size: 12px; }
+        .td-course-b { background: #dce5f0; color: #374151; font-weight: 700; font-size: 11px; }
+        .td-person-b { background: white; color: #1f2937; font-size: 12px; }
+        .td-person-b.zero { background: #f8fafc; color: #9ca3af; }
+        .td-sub-course-b { background: #eaf0f7; color: #374151; font-weight: 700; font-size: 11px; }
+        .td-sub-site-b   { background: #c8d6e8; color: #374151; font-weight: 700; font-size: 11px; }
+        .td-total-b { background: #6b84a8; color: white; font-weight: 700; font-size: 12px; }
+
+        /* 服務部 色彩層次（綠灰色系） */
+        .td-site-g   { background: #7aaa92; color: white; font-weight: 700; font-size: 12px; }
+        .td-person-g { background: white; color: #1f2937; font-size: 12px; }
+        .td-sub-site-g { background: #c4ddd3; color: #374151; font-weight: 700; font-size: 11px; }
+        .td-total-g { background: #6a9480; color: white; font-weight: 700; font-size: 12px; }
+
+        /* Modal */
+        .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .modal-box { background: white; border-radius: 12px; padding: 24px; max-width: 460px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+// ══════════════════════════════════════════════════════════
+// 員工對照表（2026春酒名單 + 課別）
+// ══════════════════════════════════════════════════════════
+const EMP = {
+    // ── 中壢所 壢一課
+    "MJ0082":{ name:"楊珈忻", dept:"中壢所", course:"壢一課", role:"所長" },
+    "MJ0012":{ name:"李詮瑋", dept:"中壢所", course:"壢一課", role:"課長" },
+    "MJ0013":{ name:"宋美琳", dept:"中壢所", course:"壢一課", role:"銷顧" },
+    "MJ0022":{ name:"陳冠旻", dept:"中壢所", course:"壢一課", role:"銷顧" },
+    "MJ0055":{ name:"陳友正", dept:"中壢所", course:"壢一課", role:"銷顧" },
+    "MJ0063":{ name:"李秋燕", dept:"中壢所", course:"壢一課", role:"銷顧" },
+    "MJ0061":{ name:"余育誠", dept:"中壢所", course:"壢一課", role:"銷顧" },
+    "MJ0099":{ name:"周呈儒", dept:"中壢所", course:"壢一課", role:"銷顧" },
+    "MJ0120":{ name:"許曉琪", dept:"中壢所", course:"壢一課", role:"銷顧" },
+    "MJ0130":{ name:"李敏瑄", dept:"中壢所", course:"壢一課", role:"銷顧" },
+    "MJ0153":{ name:"曾健軒", dept:"中壢所", course:"壢一課", role:"銷顧" },
+    // ── 中壢所 壢二課
+    "MJ0015":{ name:"邱垂傑", dept:"中壢所", course:"壢二課", role:"課長" },
+    "MJ0118":{ name:"林祐生", dept:"中壢所", course:"壢二課", role:"課長" },
+    "MJ0139":{ name:"邱玉華", dept:"中壢所", course:"壢二課", role:"銷顧" },
+    // ── 八德所 八一課
+    "MJ0008":{ name:"林猷安", dept:"八德所", course:"八一課", role:"所長" },
+    "MJ0011":{ name:"孔秋萍", dept:"八德所", course:"八一課", role:"課長" },
+    "MJ0062":{ name:"陳昭翰", dept:"八德所", course:"八一課", role:"銷顧" },
+    "MJ0083":{ name:"房立軒", dept:"八德所", course:"八一課", role:"銷顧" },
+    "MJ0107":{ name:"林詩惟", dept:"八德所", course:"八一課", role:"銷顧" },
+    "MJ0113":{ name:"王淳安", dept:"八德所", course:"八一課", role:"銷顧" },
+    "MJ0151":{ name:"陳奕瑜", dept:"八德所", course:"八一課", role:"銷顧" },
+    // ── 八德所 八二課
+    "MJ0044":{ name:"林柏毅", dept:"八德所", course:"八二課", role:"課長" },
+    "MJ0103":{ name:"鄧霖駿", dept:"八德所", course:"八二課", role:"銷顧" },
+    // ── 桃園所 桃一課
+    "MJ0041":{ name:"蕭凱升", dept:"桃園所", course:"桃一課", role:"所長" },
+    "MJ0095":{ name:"傅堃棋", dept:"桃園所", course:"桃一課", role:"課長" },
+    "MJ0060":{ name:"高永霖", dept:"桃園所", course:"桃一課", role:"銷顧" },
+    "MJ0064":{ name:"李敬平", dept:"桃園所", course:"桃一課", role:"銷顧" },
+    "MJ0147":{ name:"劉臻",   dept:"桃園所", course:"桃一課", role:"銷顧" },
+    "MJ0148":{ name:"王耀慶", dept:"桃園所", course:"桃一課", role:"銷顧" },
+    // ── 中壢廠
+    "MJ0137":{ name:"陳志星", dept:"中壢廠", role:"廠長" },
+    "MJ0005":{ name:"劉佳聖", dept:"中壢廠", role:"服專課長" },
+    "MJ0026":{ name:"官彥華", dept:"中壢廠", role:"服務專員" },
+    "MJ0052":{ name:"黃子昱", dept:"中壢廠", role:"服務專員" },
+    "MJ0073":{ name:"蔡琇如", dept:"中壢廠", role:"行政接待" },
+    "MJ0136":{ name:"林奕睿", dept:"中壢廠", role:"服務專員" },
+    "MJ0149":{ name:"徐柏彰", dept:"中壢廠", role:"接待專員" },
+    "MJ0157":{ name:"林依辰", dept:"中壢廠", role:"服務專員" },
+    "MJ0111":{ name:"顏均珊", dept:"中壢廠", role:"服務專員" },
+    "MJ0068":{ name:"卓珈琪", dept:"中壢廠", role:"會計" },
+    "MJ0007":{ name:"黃詠稚", dept:"中壢廠", role:"零件專員" },
+    "MJ0017":{ name:"徐聖傑", dept:"中壢廠", role:"引擎組長" },
+    "MJ0040":{ name:"林鴻鎧", dept:"中壢廠", role:"引擎組長" },
+    "MJ0057":{ name:"彭智君", dept:"中壢廠", role:"引擎技師" },
+    "MJ0072":{ name:"詹元溢", dept:"中壢廠", role:"PDI技師" },
+    "MJ0089":{ name:"簡翊軒", dept:"中壢廠", role:"引擎技師" },
+    "MJ0090":{ name:"梁翃盛", dept:"中壢廠", role:"引擎技師" },
+    "MJ0104":{ name:"李軒念", dept:"中壢廠", role:"引擎技師" },
+    "MJ0121":{ name:"陳彥儒", dept:"中壢廠", role:"引擎技師" },
+    "MJ0133":{ name:"黃騰毅", dept:"中壢廠", role:"引擎助理" },
+    "MJ0134":{ name:"李建國", dept:"中壢廠", role:"引擎助理" },
+    "MJ0141":{ name:"張楷承", dept:"八德廠", role:"引擎技師" },
+    "MJ0126":{ name:"呂育全", dept:"中壢廠", role:"PDI技師" },
+    "MJ0129":{ name:"葉俊佑", dept:"中壢廠", role:"PDI技師" },
+    "MJ0128":{ name:"王為泰", dept:"中壢廠", role:"引擎助理" },
+    // ── 八德廠
+    "MJ0085":{ name:"佘慶麟", dept:"八德廠", role:"廠長" },
+    "MJ0035":{ name:"盧莉薇", dept:"八德廠", role:"會計" },
+    "MJ0032":{ name:"馬祺政", dept:"八德廠", role:"引擎技師" },
+    "MJ0086":{ name:"陳建興", dept:"八德廠", role:"鈑金技師" },
+    "MJ0116":{ name:"謝俊諭", dept:"八德廠", role:"引擎組長" },
+    "MJ0131":{ name:"董科男", dept:"八德廠", role:"服專兼零件" },
+    "MJ0138":{ name:"呂澄易", dept:"八德廠", role:"引擎技師" },
+};
+
+// ══════════════════════════════════════════════════════════
+// 結構定義（課別）
+// ══════════════════════════════════════════════════════════
+const BIZ_STRUCTURE = {
+    "中壢所": {
+        // 壢一課：課長李詮瑋 + 組員
+        "壢一課": ["MJ0012","MJ0013","MJ0022","MJ0099","MJ0139"],
+        // 壢二課：課長林祐生 + 組員（邱垂傑資深課長同列）
+        "壢二課": ["MJ0118","MJ0015","MJ0061","MJ0063","MJ0120","MJ0153"],
+    },
+    "八德所": {
+        // 八一課：課長孔秋萍 + 組員
+        "八一課": ["MJ0011","MJ0107","MJ0113","MJ0062"],
+        // 八二課：課長林柏毅 + 組員
+        "八二課": ["MJ0044","MJ0103","MJ0083","MJ0151"],
+    },
+    "桃園所": {
+        // 桃一課：課長傅堃棋 + 組員
+        "桃一課": ["MJ0095","MJ0060","MJ0064","MJ0147","MJ0148"],
+    },
+};
+
+// ══════════════════════════════════════════════════════════
+// App
+// ══════════════════════════════════════════════════════════
+function App() {
+    const [data,        setData]        = React.useState(null);
+    const [showModal,   setShowModal]   = React.useState(false);
+    const [bizExpanded, setBizExpanded] = React.useState(false); // 預設收折
+
+    // 從 localStorage 讀取目標值，預設 150000
+    const savedTarget = parseInt(localStorage.getItem('carcare_target')) || 150000;
+    const fmt0 = n => new Intl.NumberFormat('zh-TW').format(Math.round(n || 0));
+    const [target,      setTarget]      = React.useState(savedTarget);
+    const [targetInput, setTargetInput] = React.useState(fmt0(savedTarget));
+
+    React.useEffect(() => { loadDemo(); }, []);
+
+    const fmt = n => new Intl.NumberFormat('zh-TW').format(Math.round(n || 0));
+    const div = (a, b) => b > 0 ? a / b : 0;
+
+    /* ── Demo 資料（5月，截至 2026/05/19）── */
+    function loadDemo() {
+        setData({
+            fileName: '205_1.xlsx',
+            lastUpdated: '2026/05/19',
+            period: '2026-05-01 ~ 2026-05-31（進行中）',
+            bizByPerson: {
+                "MJ0118": { count:1, revenue:1800 },
+                "MJ0015": { count:1, revenue:2500 },
+                "MJ0113": { count:1, revenue:2200 },
+            },
+            svcByPerson: {
+                "MJ0157": { count:10, revenue:17550 },
+                "MJ0026": { count:7,  revenue:13412 },
+                "MJ0136": { count:7,  revenue:11550 },
+                "MJ0149": { count:3,  revenue:3781  },
+                "MJ0052": { count:1,  revenue:1500  },
+                "MJ0121": { count:1,  revenue:400   },
+            },
+            bizTotal: { revenue:6500,  count:3  },
+            svcTotal: { revenue:48193, count:29 },
+        });
+    }
+
+    /* ── 解析 Excel ── */
+    function handleFile(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            try {
+                const wb   = XLSX.read(ev.target.result, { type:'binary' });
+                const ws   = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+
+                // ── 找 header 列（同時有「部門」和「總金額」）
+                let hRow = -1, cDept=-1, cAmt=-1, cRecruit=-1;
+                for (let i = 0; i < rows.length && hRow < 0; i++) {
+                    const r = rows[i].map(c => String(c||'').trim());
+                    if (r.includes('部門') && r.includes('總金額')) {
+                        hRow = i;
+                        r.forEach((v,ci) => {
+                            if (v === '部門')  cDept = ci;
+                            if (v === '總金額') cAmt  = ci;
+                        });
+                        // 招攬人員員工代號（營業部、服務部皆用此欄）
+                        for (let ci=0; ci<r.length; ci++) {
+                            if (r[ci]==='招攬人員') {
+                                for (let k=ci+1; k<=ci+4; k++) if(r[k]==='員工代號'){ cRecruit=k; break; }
+                            }
+                        }
+                    }
+                }
+                // fallback
+                if (cDept<0)    cDept    = 3;
+                if (cAmt<0)     cAmt     = 18;
+                if (cRecruit<0) cRecruit = 29;
+
+                // ── 找期間
+                let period = '';
+                for (let i=0; i<30 && !period; i++) {
+                    (rows[i]||[]).forEach(c => {
+                        if (/\d{4}-\d{2}-\d{2}\s*~/.test(String(c||''))) period = String(c);
+                    });
+                }
+
+                // ── 解析每一列
+                const bizByPerson = {}, svcByPerson = {};
+                let bizRev=0, bizCnt=0, svcRev=0, svcCnt=0;
+
+                for (let i = hRow+1; i < rows.length; i++) {
+                    const r   = rows[i];
+                    if (!r[0]) continue;
+                    const dept = String(r[cDept]||'').trim();
+                    const amt  = parseFloat(r[cAmt]) || 0;
+                    if (amt <= 0) continue;
+
+                    const isBiz = ['中壢所','八德所','桃園所'].includes(dept);
+                    const isSvc = ['中壢廠','八德廠'].includes(dept);
+                    if (!isBiz && !isSvc) continue;
+
+                    if (isBiz) {
+                        const id = String(r[cRecruit]||'').trim();
+                        if (!id || id==='CR2(EC)') continue;
+                        if (!bizByPerson[id]) bizByPerson[id]={count:0,revenue:0};
+                        bizByPerson[id].count++;
+                        bizByPerson[id].revenue += amt;
+                        bizRev += amt; bizCnt++;
+                    } else {
+                        const id = String(r[cRecruit]||'').trim();
+                        if (!id || id==='CR2(EC)') continue;
+                        if (!svcByPerson[id]) svcByPerson[id]={count:0,revenue:0};
+                        svcByPerson[id].count++;
+                        svcByPerson[id].revenue += amt;
+                        svcRev += amt; svcCnt++;
+                    }
+                }
+
+                const newData = {
+                    fileName: file.name,
+                    lastUpdated: new Date().toLocaleDateString('zh-TW'),
+                    period,
+                    bizByPerson,
+                    svcByPerson,
+                    bizTotal: { revenue:bizRev, count:bizCnt },
+                    svcTotal: { revenue:svcRev, count:svcCnt },
+                };
+                setData(newData);
+                // 匯報寫入
+                try {
+                    const nowD = new Date();
+                    const yr = nowD.getFullYear().toString();
+                    const mo = String(nowD.getMonth()+1).padStart(2,'0');
+                    const totalRevCC = bizRev + svcRev;
+                    const totalCntCC = bizCnt + svcCnt;
+                    const savedTgt = parseInt(localStorage.getItem('carcare_target')) || 0;
+                    const topBiz = Object.entries(bizByPerson).sort((a,b)=>b[1].revenue-a[1].revenue).slice(0,3).map(([id,v])=>({id,count:v.count,revenue:v.revenue}));
+                    const topSvc = Object.entries(svcByPerson).sort((a,b)=>b[1].revenue-a[1].revenue).slice(0,3).map(([id,v])=>({id,count:v.count,revenue:v.revenue}));
+                    localStorage.setItem(`mj_carcare_${yr}_${mo}`, JSON.stringify({
+                        year:yr, month:mo,
+                        revenue: totalRevCC, count: totalCntCC,
+                        unitPrice: totalCntCC > 0 ? Math.round(totalRevCC/totalCntCC) : 0,
+                        bizRevenue: bizRev, bizCount: bizCnt,
+                        svcRevenue: svcRev, svcCount: svcCnt,
+                        target: savedTgt,
+                        achieveRate: savedTgt > 0 ? +((totalRevCC/savedTgt)*100).toFixed(1) : null,
+                        topBiz, topSvc, period,
+                        updatedAt: new Date().toISOString()
+                    }));
+                } catch(e) { console.error('車美部匯報寫入失敗', e); }
+                setShowModal(false);
+            } catch(err) { alert('解析失敗：' + err.message); }
+        };
+        reader.readAsBinaryString(file);
+    }
+
+    /* ── 目標輸入 ── */
+    function onTargetChange(v) {
+        const raw = v.replace(/,/g,'');
+        const num = parseInt(raw) || 0;
+        setTarget(num);
+        setTargetInput(v);
+        if (num > 0) localStorage.setItem('carcare_target', num);
+    }
+    function onTargetBlur() {
+        setTargetInput(target > 0 ? fmt(target) : '');
+    }
+
+    if (!data) return <div style={{padding:24}}>載入中...</div>;
+
+    const totalRev = data.bizTotal.revenue + data.svcTotal.revenue;
+    const totalCnt = data.bizTotal.count   + data.svcTotal.count;
+    const pct      = target > 0 ? (totalRev / target) * 100 : 0;
+    const barColor = pct >= 100 ? '#16a34a' : pct >= 70 ? '#d97706' : '#b91c1c';
+    const pctTxt   = pct >= 100 ? '#16a34a' : pct >= 70 ? '#d97706' : '#b91c1c';
+
+    return (
+        <div>
+            {/* ── Modal ── */}
+            {showModal && (
+                <div className="modal-bg" onClick={() => setShowModal(false)}>
+                    <div className="modal-box" onClick={e => e.stopPropagation()}>
+                        <h3 style={{fontSize:16, fontWeight:700, marginBottom:6}}>上傳業績報表</h3>
+                        <p style={{fontSize:12, color:'#6b7280', marginBottom:14}}>上傳 205 業績統計表（.xlsx），系統將自動解析欄位。</p>
+                        <input type="file" accept=".xlsx,.xls" onChange={handleFile}
+                            style={{width:'100%', padding:8, border:'1px solid #e5e7eb', borderRadius:6, fontSize:13, boxSizing:'border-box'}} />
+                        <div style={{marginTop:14, display:'flex', justifyContent:'flex-end'}}>
+                            <button className="btn" onClick={() => setShowModal(false)}>取消</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Header ── */}
+            <div className="page-header">
+                <div className="breadcrumb">
+                    <a href="../integration/">顧關部</a> /&nbsp;
+                    <a href="./carcare_overview.html">車美部</a> /&nbsp;
+                    <span style={{color:'#6b7280'}}>業績明細</span>
+                </div>
+                <div className="title-row">
+                    <div className="red-accent"></div>
+                    <div>
+                        <h1 style={{fontSize:17, fontWeight:600, color:'#111827', margin:0, lineHeight:1.3}}>業績明細</h1>
+                        <div style={{fontSize:12, color:'#6b7280', marginTop:2}}>營業部・服務部業績統計</div>
+                    </div>
+                </div>
+                <div className="toolbar">
+                    {/* SP 同步年月 */}
+                    <select id="cc-sp-year" className="btn" style={{padding:'4px 8px',cursor:'pointer'}}>
+                        {[2026,2025].map(y=><option key={y} value={y}>{y}年</option>)}
+                    </select>
+                    <select id="cc-sp-month" className="btn" style={{padding:'4px 8px',cursor:'pointer'}}>
+                        {Array.from({length:12},(_,i)=>i+1).map(m=><option key={m} value={String(m).padStart(2,'0')} selected={m===new Date().getMonth()+1}>{m}月</option>)}
+                    </select>
+                    <button className="btn" style={{borderColor:'#6ee7b7',background:'#f0fdf4',color:'#065f46'}} onClick={async()=>{
+                        const y=document.getElementById('cc-sp-year').value;
+                        const m=document.getElementById('cc-sp-month').value;
+                        try{
+                            const spUrl=`https://fetcb107004.sharepoint.com/sites/customer-/Shared%20Documents/AI%E6%93%B7%E5%8F%96%E8%B3%87%E6%96%99/%E8%BB%8A%E7%BE%8E%E9%83%A8/%E6%A5%AD%E7%B8%BE%E6%98%8E%E7%B4%B0%E8%A1%A8/carcare_${y}${m}.xlsx`;
+                            const res=await fetch(spUrl,{credentials:'include'});
+                            if(res.status===401||res.status===403)throw new Error('請先登入 O365（office.com）再重試');
+                            if(res.status===404)throw new Error(`找不到 carcare_${y}${m}.xlsx，請確認 SharePoint 檔名`);
+                            if(!res.ok)throw new Error('HTTP '+res.status);
+                            const buf=await res.arrayBuffer();
+                            const fakeFile=new File([buf],`carcare_${y}${m}.xlsx`);
+                            const fakeEv={target:{files:[fakeFile],value:''}};
+                            handleFile(fakeEv);
+                        }catch(e){alert('SharePoint 同步失敗：'+e.message);}
+                    }}>🔗 SharePoint 同步</button>
+                    <button className="btn btn-red" onClick={() => setShowModal(true)}>📤 手動上傳</button>
+                    <span className="file-badge">📁 {data.fileName}</span>
+                    <span style={{fontSize:11, color:'#6b7280'}}>{data.period}　更新：{data.lastUpdated}</span>
+                </div>
+            </div>
+
+            {/* ── Content ── */}
+            <div style={{padding:'16px 24px', maxWidth:1280, margin:'0 auto'}}>
+
+                {/* Summary Cards */}
+                <div className="summary-row">
+                    <div className="scard" style={{borderLeft:'3px solid #374151'}}>
+                        <div className="scard-label">合計</div>
+                        <div className="scard-val" style={{color:'#111827'}}>{fmt(totalRev)} <span style={{fontSize:13, fontWeight:400, color:'#9ca3af'}}>元</span></div>
+                        <div className="scard-meta">
+                            <span>件數 <strong>{totalCnt}</strong></span>
+                            <span>客單價 <strong>{fmt(div(totalRev,totalCnt))}</strong></span>
+                        </div>
+                    </div>
+                    <div className="scard" style={{borderLeft:'3px solid #1d4ed8'}}>
+                        <div className="scard-label" style={{color:'#1e40af'}}>營業部</div>
+                        <div className="scard-val" style={{color:'#1e40af'}}>{fmt(data.bizTotal.revenue)} <span style={{fontSize:13, fontWeight:400, color:'#93c5fd'}}>元</span></div>
+                        <div className="scard-meta">
+                            <span>件數 <strong>{data.bizTotal.count}</strong></span>
+                            <span>客單價 <strong>{fmt(div(data.bizTotal.revenue,data.bizTotal.count))}</strong></span>
+                            <span>佔比 <strong style={{color:'#1d4ed8'}}>{totalRev>0?Math.round(data.bizTotal.revenue/totalRev*100):0}%</strong></span>
+                        </div>
+                    </div>
+                    <div className="scard" style={{borderLeft:'3px solid #16a34a'}}>
+                        <div className="scard-label" style={{color:'#166534'}}>服務部</div>
+                        <div className="scard-val" style={{color:'#16a34a'}}>{fmt(data.svcTotal.revenue)} <span style={{fontSize:13, fontWeight:400, color:'#86efac'}}>元</span></div>
+                        <div className="scard-meta">
+                            <span>件數 <strong>{data.svcTotal.count}</strong></span>
+                            <span>客單價 <strong>{fmt(div(data.svcTotal.revenue,data.svcTotal.count))}</strong></span>
+                            <span>佔比 <strong style={{color:'#16a34a'}}>{totalRev>0?Math.round(data.svcTotal.revenue/totalRev*100):0}%</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Target */}
+                <div className="target-row">
+                    <div className="target-label">本月目標</div>
+                    <input className="target-input" value={targetInput}
+                        onChange={e => onTargetChange(e.target.value)}
+                        onBlur={onTargetBlur}
+                        placeholder="輸入目標" />
+                    <span style={{fontSize:12, color:'#9ca3af'}}>元</span>
+                    {target > 0 && (
+                        <div className="achieve-wrap">
+                            <div className="achieve-pct" style={{color:pctTxt}}>{Math.round(pct)}%</div>
+                            <div className="achieve-info">
+                                <div className="achieve-detail">
+                                    實績 {fmt(totalRev)} ／ 目標 {fmt(target)}　
+                                    <span style={{color: totalRev>=target ? '#16a34a' : '#b91c1c', fontWeight:600}}>
+                                        {totalRev>=target?'▲ +':'▼ '}{fmt(Math.abs(totalRev-target))}
+                                    </span>
+                                </div>
+                                <div className="bar-bg">
+                                    <div className="bar-fill" style={{width:Math.min(pct,100)+'%', background:barColor}}></div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Tables */}
+                <div className="tables-wrap">
+                    <BizTable bizByPerson={data.bizByPerson} bizTotal={data.bizTotal} fmt={fmt}
+                        expanded={bizExpanded} onToggle={()=>setBizExpanded(e=>!e)} />
+                    <SvcTable svcByPerson={data.svcByPerson} svcTotal={data.svcTotal} fmt={fmt} />
+                </div>
+
+            </div>
+        </div>
+    );
+}
+
+// ══════════════════════════════════════════════════════════
+// 營業部表格：rowspan 合併儲存格（所 > 課 > 全員含0，可收折）
+// ══════════════════════════════════════════════════════════
+function BizTable({ bizByPerson, bizTotal, fmt, expanded, onToggle }) {
+    const bp = bizByPerson || {};
+
+    const buildRows = (expandAll) => {
+        const rows = [];
+        Object.entries(BIZ_STRUCTURE).forEach(([site, courses]) => {
+            const allIds  = Object.values(courses).flat();
+            const siteCnt = allIds.reduce((s,id) => s+(bp[id]?.count||0), 0);
+            const siteRev = allIds.reduce((s,id) => s+(bp[id]?.revenue||0), 0);
+
+            if (!expandAll) {
+                // 收折：只顯示有業績的人，扁平列出
+                const visIds = allIds.filter(id => (bp[id]?.count||0) > 0);
+                if (visIds.length === 0) {
+                    rows.push({ type:'site-sub', site, siteCnt, siteRev });
+                    return;
+                }
+                let firstSite = true;
+                visIds.forEach(id => {
+                    const e = EMP[id]; if (!e) return;
+                    rows.push({
+                        type:'person', id, name:e.name, isZ:false,
+                        cnt:bp[id].count, rev:bp[id].revenue,
+                        site, siteRowspan: firstSite ? visIds.length + 1 : 0,
+                        course:null, courseRowspan:0,
+                        siteCnt, siteRev, cCnt:0, cRev:0,
+                    });
+                    firstSite = false;
+                });
+                rows.push({ type:'site-sub', site, siteCnt, siteRev });
+            } else {
+                // 展開：完整課別 rowspan 結構
+                let siteRowspan = 1;
+                Object.values(courses).forEach(ids => { siteRowspan += ids.length + 1; });
+                let firstSiteRow = true;
+                Object.entries(courses).forEach(([course, ids]) => {
+                    const cCnt = ids.reduce((s,id)=>s+(bp[id]?.count||0),0);
+                    const cRev = ids.reduce((s,id)=>s+(bp[id]?.revenue||0),0);
+                    const courseRowspan = ids.length + 1;
+                    let firstCourseRow = true;
+                    ids.forEach(id => {
+                        const e = EMP[id]; if (!e) return;
+                        const cnt = bp[id]?.count || 0;
+                        const rev = bp[id]?.revenue || 0;
+                        rows.push({
+                            type:'person', id, name:e.name, isZ:cnt===0, cnt, rev,
+                            site, siteRowspan: firstSiteRow ? siteRowspan : 0,
+                            course, courseRowspan: firstCourseRow ? courseRowspan : 0,
+                            siteCnt, siteRev, cCnt, cRev,
+                        });
+                        firstSiteRow   = false;
+                        firstCourseRow = false;
+                    });
+                    rows.push({ type:'course-sub', course, cCnt, cRev, siteRowspan:0, courseRowspan:0 });
+                });
+                rows.push({ type:'site-sub', site, siteCnt, siteRev });
+            }
+        });
+        return rows;
+    };
+
+    const rows = buildRows(expanded);
+
+    return (
+        <div className="tpanel">
+            <div className="tpanel-hd blue" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <span>營業部明細</span>
+                <button onClick={onToggle} style={{
+                    fontSize:11, padding:'2px 10px', borderRadius:5,
+                    border:'1px solid #c5d0e0', background:'white',
+                    color:'#374151', cursor:'pointer', fontFamily:'inherit', fontWeight:600,
+                }}>
+                    {expanded ? '▲ 收折' : '▼ 展開全員'}
+                </button>
+            </div>
+            <div>
+                <table className="t">
+                    <colgroup>
+                        <col style={{width: expanded ? '20%' : '25%'}} />
+                        {expanded && <col style={{width:'18%'}} />}
+                        <col style={{width: expanded ? '28%' : '40%'}} />
+                        <col style={{width:'16%'}} />
+                        <col style={{width:'20%'}} />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th className="b">據點</th>
+                            {expanded && <th className="b">課別</th>}
+                            <th className="b">姓名</th>
+                            <th className="b">件數</th>
+                            <th className="b">業績金額</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((row, i) => {
+                            if (row.type === 'site-sub') {
+                                // 收折模式下，無業績的所不顯示
+                                if (!expanded && row.siteCnt === 0) return null;
+                                return (
+                                    <tr key={`ss-${row.site}-${i}`}>
+                                        <td colSpan={expanded ? 3 : 2} className="td-sub-site-b">{row.site} 小計</td>
+                                        <td className="td-sub-site-b">{row.siteCnt}</td>
+                                        <td className="td-sub-site-b">{fmt(row.siteRev)}</td>
+                                    </tr>
+                                );
+                            }
+                            if (row.type === 'course-sub') {
+                                return (
+                                    <tr key={`cs-${row.course}-${i}`}>
+                                        <td colSpan={3} className="td-sub-course-b">{row.course} 小計</td>
+                                        <td className="td-sub-course-b">{row.cCnt}</td>
+                                        <td className="td-sub-course-b">{fmt(row.cRev)}</td>
+                                    </tr>
+                                );
+                            }
+                            const personCls = `td-person-b${row.isZ ? ' zero' : ''}`;
+                            return (
+                                <tr key={row.id}>
+                                    {row.siteRowspan > 0 && (
+                                        <td rowSpan={row.siteRowspan} className="td-site-b">{row.site}</td>
+                                    )}
+                                    {expanded && row.courseRowspan > 0 && (
+                                        <td rowSpan={row.courseRowspan} className="td-course-b">{row.course}</td>
+                                    )}
+                                    <td className={personCls}>{row.name}</td>
+                                    <td className={personCls}>{row.isZ ? <span style={{color:'#cbd5e1'}}>—</span> : row.cnt}</td>
+                                    <td className={personCls}>{row.isZ ? <span style={{color:'#cbd5e1'}}>—</span> : fmt(row.rev)}</td>
+                                </tr>
+                            );
+                        })}
+                        <tr>
+                            <td colSpan={expanded ? 3 : 2} className="td-total-b">營業部合計</td>
+                            <td className="td-total-b">{bizTotal.count}</td>
+                            <td className="td-total-b">{fmt(bizTotal.revenue)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
+// ══════════════════════════════════════════════════════════
+// 服務部表格：rowspan 合併儲存格（廠 > 有業績者，按金額降冪）
+// ══════════════════════════════════════════════════════════
+function SvcTable({ svcByPerson, svcTotal, fmt }) {
+    const sp = svcByPerson || {};
+
+    // 依廠分組，按金額降冪
+    const groups = { "中壢廠":[], "八德廠":[] };
+    Object.entries(sp).forEach(([id, stat]) => {
+        const e = EMP[id];
+        const dept = e?.dept;
+        if (dept === '中壢廠') groups['中壢廠'].push({ id, name:e.name, role:e.role, ...stat });
+        else if (dept === '八德廠') groups['八德廠'].push({ id, name:e.name, role:e.role, ...stat });
+        else {
+            if (!groups['其他']) groups['其他'] = [];
+            groups['其他'].push({ id, name:e?.name||id, role:'', ...stat });
+        }
+    });
+    Object.values(groups).forEach(arr => arr.sort((a,b) => b.revenue - a.revenue));
+
+    // 建立列資料
+    const rows = [];
+    Object.entries(groups).forEach(([dept, people]) => {
+        if (!people || people.length === 0) return;
+        const dCnt = people.reduce((s,p)=>s+p.count,0);
+        const dRev = people.reduce((s,p)=>s+p.revenue,0);
+        const deptRowspan = people.length; // 只跨人員列，小計行不納入
+        let first = true;
+        people.forEach(p => {
+            rows.push({ type:'person', dept, deptRowspan: first ? deptRowspan : 0, dCnt, dRev, ...p });
+            first = false;
+        });
+        rows.push({ type:'sub', dept, dCnt, dRev });
+    });
+
+    return (
+        <div className="tpanel">
+            <div className="tpanel-hd green">服務部明細</div>
+            <div>
+                <table className="t">
+                    <colgroup>
+                        <col style={{width:'22%'}} />
+                        <col style={{width:'36%'}} />
+                        <col style={{width:'21%'}} />
+                        <col style={{width:'21%'}} />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th className="g">服務廠</th>
+                            <th className="g">招攬人員</th>
+                            <th className="g">件數</th>
+                            <th className="g">業績金額</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((row, i) => {
+                            if (row.type === 'sub') {
+                                return (
+                                    <tr key={`gs-${row.dept}`}>
+                                        <td colSpan={2} className="td-sub-site-g">{row.dept} 小計</td>
+                                        <td className="td-sub-site-g">{row.dCnt}</td>
+                                        <td className="td-sub-site-g">{fmt(row.dRev)}</td>
+                                    </tr>
+                                );
+                            }
+                            return (
+                                <tr key={row.id}>
+                                    {row.deptRowspan > 0 && (
+                                        <td rowSpan={row.deptRowspan} className="td-site-g">{row.dept}</td>
+                                    )}
+                                    <td className="td-person-g">{row.name}</td>
+                                    <td className="td-person-g">{row.count}</td>
+                                    <td className="td-person-g">{fmt(row.revenue)}</td>
+                                </tr>
+                            );
+                        })}
+                        <tr>
+                            <td colSpan={2} className="td-total-g">服務部合計</td>
+                            <td className="td-total-g">{svcTotal.count}</td>
+                            <td className="td-total-g">{fmt(svcTotal.revenue)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
+ReactDOM.render(<App/>, document.getElementById('root'));
+</script>
+</body>
+</html>
