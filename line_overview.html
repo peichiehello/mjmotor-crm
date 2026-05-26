@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LINE@ 會員系統 - 銘勁汽車</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f3f4f6;
+        }
+        .page-header {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 14px 24px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .breadcrumb {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-bottom: 6px;
+        }
+        .breadcrumb a {
+            color: #9ca3af;
+            text-decoration: none;
+        }
+        .breadcrumb a:hover {
+            color: #b91c1c;
+        }
+        .title-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .red-accent {
+            width: 3px;
+            min-height: 22px;
+            background: #b91c1c;
+            border-radius: 0;
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+        .main-content {
+            padding: 20px 24px;
+            max-width: 1000px;
+        }
+        .section-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            padding-left: 2px;
+        }
+        .overview-divider {
+            border: none;
+            border-top: 1px solid #e5e7eb;
+            margin: 20px 0;
+        }
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 10px;
+        }
+        .overview-card {
+            background: white;
+            border-radius: 10px;
+            padding: 13px;
+            border: 1.5px solid #d1d5db;
+            cursor: pointer;
+            transition: all 0.15s;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .overview-card:hover {
+            border-color: #b91c1c;
+            border-width: 2px;
+        }
+        .overview-card.dimmed {
+            opacity: 0.65;
+        }
+        .card-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .card-icon svg {
+            width: 15px;
+            height: 15px;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .card-icon.blue { background: #dbeafe; }
+        .card-icon.blue svg { stroke: #1d4ed8; }
+        .card-icon.amber { background: #fef3c7; }
+        .card-icon.amber svg { stroke: #b45309; }
+        .card-icon.purple { background: #f3e8ff; }
+        .card-icon.purple svg { stroke: #7c3aed; }
+        .card-icon.green { background: #dcfce7; }
+        .card-icon.green svg { stroke: #16a34a; }
+        .card-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 2px;
+        }
+        .card-subtitle {
+            font-size: 10px;
+            color: #6b7280;
+            margin: 0;
+        }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        .status-running { background: #dcfce7; color: #166534; }
+        .status-construction { background: #fef3c7; color: #92400e; }
+        .insight-card {
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+        .insight-green { background: #dcfce7; color: #166534; }
+        .insight-blue { background: #dbeafe; color: #1e40af; }
+        .insight-amber { background: #fef3c7; color: #92400e; }
+    </style>
+</head>
+<body>
+
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="breadcrumb">
+            <a href="customer_relations.html">顧關部</a>
+        </div>
+        <div class="title-row">
+            <div class="red-accent"></div>
+            <div>
+                <h1 style="font-size: 17px; font-weight: 600; color: #111827; margin: 0; line-height: 1.3;">LINE@會員</h1>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">會員管理與分析 · 更新：2026/05/05</div>
+            </div>
+        </div>
+        <div style="margin-top:10px;margin-left:13px;">
+            <button id="line-sync-btn" onclick="window._saveLineReport()" style="font-size:12px;padding:4px 12px;border-radius:6px;border:1px solid #fca5a5;background:#fff5f5;color:#b91c1c;cursor:pointer;font-family:inherit;">📤 同步至匯報</button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        
+        <!-- 關鍵指標 -->
+        <div class="section-label">關鍵指標</div>
+        <div class="card-grid" style="margin-bottom: 30px;">
+            
+            <!-- 會員總數 -->
+            <div class="overview-card">
+                <div class="card-icon blue">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="card-title">會員總數</h3>
+                    <p class="card-subtitle">截至 04/30</p>
+                </div>
+                <div style="font-size: 20px; font-weight: 700; color: #111827; margin: 4px 0;">5,706</div>
+                <div style="font-size: 9px; color: #16a34a;">+88 本月新增</div>
+            </div>
+
+            <!-- 推播開啟率 -->
+            <div class="overview-card">
+                <div class="card-icon amber">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="card-title">推播開啟率</h3>
+                    <p class="card-subtitle">本月平均</p>
+                </div>
+                <div style="font-size: 20px; font-weight: 700; color: #111827; margin: 4px 0;">71.2%</div>
+                <div style="font-size: 9px; color: #dc2626;">超高黏著度</div>
+            </div>
+
+            <!-- 日均客服對話 -->
+            <div class="overview-card">
+                <div class="card-icon purple">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="card-title">日均對話</h3>
+                    <p class="card-subtitle">本月平均</p>
+                </div>
+                <div style="font-size: 20px; font-weight: 700; color: #111827; margin: 4px 0;">58.7串</div>
+                <div style="font-size: 9px; color: #6b7280;">互動活躍</div>
+            </div>
+
+            <!-- 會員綁定率 -->
+            <div class="overview-card">
+                <div class="card-icon green">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="card-title">會員綁定率</h3>
+                    <p class="card-subtitle">4-6月宣導期</p>
+                </div>
+                <div style="font-size: 20px; font-weight: 700; color: #111827; margin: 4px 0;">--%</div>
+                <div style="font-size: 9px; color: #6b7280;">追蹤中</div>
+            </div>
+
+        </div>
+
+        <hr class="overview-divider">
+
+        <!-- 系統功能 -->
+        <div class="section-label">系統功能</div>
+        <div class="card-grid" style="margin-bottom: 30px;">
+            
+            <!-- 績效數據分析 -->
+            <a href="line_performance.html" style="text-decoration: none;">
+                <div class="overview-card">
+                    <div class="card-icon blue">
+                        <svg viewBox="0 0 24 24">
+                            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                            <polyline points="17 6 23 6 23 12"></polyline>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="card-title">績效數據分析</h3>
+                        <p class="card-subtitle">會員成長・推播互動</p>
+                    </div>
+                    <span class="status-badge status-running">運行中</span>
+                </div>
+            </a>
+
+            <!-- 會員綁定績效 -->
+            <a href="line_binding.html" style="text-decoration: none;">
+                <div class="overview-card">
+                    <div class="card-icon green">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="card-title">會員綁定績效</h3>
+                        <p class="card-subtitle">營業所・銷售顧問</p>
+                    </div>
+                    <span class="status-badge status-running">運行中</span>
+                </div>
+            </a>
+
+            <!-- 行銷推播方案 -->
+            <a href="line_campaign_3.html" style="text-decoration: none;">
+                <div class="overview-card">
+                    <div class="card-icon amber">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="card-title">行銷推播方案</h3>
+                        <p class="card-subtitle">推播計畫・內容管理</p>
+                    </div>
+                    <span class="status-badge status-running">運行中</span>
+                </div>
+            </a>
+
+            <!-- 數據報表匯出 -->
+            <div class="overview-card dimmed">
+                <div class="card-icon purple">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="12" y1="18" x2="12" y2="12"></line>
+                        <line x1="9" y1="15" x2="15" y2="15"></line>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="card-title">數據報表匯出</h3>
+                    <p class="card-subtitle">CSV・月報生成</p>
+                </div>
+                <span class="status-badge status-construction">建構中</span>
+            </div>
+
+        </div>
+
+        <hr class="overview-divider">
+
+        <!-- 本月重點洞察 -->
+        <div class="section-label">本月重點洞察</div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+            
+            <div class="insight-card insight-green">
+                <strong>表現優異</strong><br>
+                推播開啟率 71.2% 遠超業界平均，會員黏著度極高
+            </div>
+
+            <div class="insight-card insight-blue">
+                <strong>穩定成長</strong><br>
+                本月新增 88 人，封鎖率僅 3.98%，會員品質優良
+            </div>
+
+            <div class="insight-card insight-amber">
+                <strong>待改善</strong><br>
+                自動回覆比例僅 13.2%，建議擴充 FAQ 功能減輕人工負擔
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- 匯報資料同步 -->
+    <script>
+    (function(){
+        // LINE 靜態數據（與頁面一致）
+        const LINE_DATA = {
+            total: 5706,
+            newAdded: 88,
+            openRate: 71.2,
+            bindRate: null,
+            dailyDialogue: 58.7,
+            blockRate: 3.98,
+            autoReplyRate: 13.2
+        };
+        function saveLineReport() {
+            try {
+                const now = new Date();
+                const yr = now.getFullYear().toString();
+                const mo = String(now.getMonth()+1).padStart(2,'0');
+                const key = `mj_line_${yr}_${mo}`;
+                localStorage.setItem(key, JSON.stringify({
+                    year: yr, month: mo,
+                    ...LINE_DATA,
+                    updatedAt: now.toISOString()
+                }));
+                const btn = document.getElementById('line-sync-btn');
+                if(btn){ btn.textContent='✓ 已同步'; btn.style.color='#16a34a'; setTimeout(()=>{btn.textContent='📤 同步至匯報';btn.style.color='';},2000); }
+            } catch(e){ console.error('LINE 匯報寫入失敗', e); }
+        }
+        // 頁面載入時自動寫入一次
+        saveLineReport();
+        window._saveLineReport = saveLineReport;
+    })();
+    </script>
+
+</body>
+</html>

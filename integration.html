@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>銘勁汽車 顧關部整合儀表板</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden;
+            background: #0f172a;
+        }
+        .sidebar { 
+            width: 200px; 
+            height: 100vh; 
+            background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+            border-right: 1px solid #334155;
+            overflow-y: auto;
+        }
+        .main-content { 
+            flex: 1; 
+            height: 100vh; 
+            overflow-y: auto;
+            background: #f3f4f6;
+        }
+        .nav-section {
+            padding: 8px 0;
+            border-bottom: 1px solid #334155;
+        }
+        .nav-section-title {
+            padding: 12px 20px 8px;
+            font-size: 10px;
+            color: #94a3b8;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .nav-button {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            color: #cbd5e1;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+            text-align: left;
+            border-left: 3px solid transparent;
+        }
+        .nav-button.indent {
+            padding-left: 32px;
+            font-size: 12px;
+            opacity: 0.9;
+        }
+        .nav-button:hover { 
+            background: rgba(185, 28, 28, 0.1);
+            color: white;
+        }
+        .nav-button.active { 
+            background: rgba(185, 28, 28, 0.15);
+            color: white;
+            border-left-color: #b91c1c;
+            font-weight: 600;
+        }
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            opacity: 0.7;
+        }
+        .nav-button.active .nav-icon {
+            opacity: 1;
+            stroke: #ef4444;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .overview-card {
+            background: white;
+            border-radius: 10px;
+            padding: 13px;
+            border: 1.5px solid #d1d5db;
+            cursor: pointer;
+            transition: all 0.15s;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .overview-card:hover { border-color: #b91c1c; border-width: 2px; }
+        .overview-card.dimmed { opacity: 0.65; }
+        .card-icon {
+            width: 30px; height: 30px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .card-icon svg {
+            width: 15px; height: 15px; fill: none;
+            stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+        }
+        .card-icon.red  { background: #fee2e2; }
+        .card-icon.red  svg { stroke: #b91c1c; }
+        .card-icon.blue { background: #dbeafe; }
+        .card-icon.blue svg { stroke: #1d4ed8; }
+        .card-icon.amber{ background: #fef3c7; }
+        .card-icon.amber svg { stroke: #b45309; }
+        .status-badge {
+            display: inline-flex; align-items: center;
+            padding: 2px 7px; border-radius: 4px;
+            font-size: 10px; font-weight: 600;
+        }
+        .status-running      { background: #dcfce7; color: #166534; }
+        .status-construction { background: #fef3c7; color: #92400e; }
+        .overview-section-label {
+            font-size: 11px; font-weight: 600; color: #6b7280;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            margin-bottom: 10px; padding-left: 2px;
+        }
+        .overview-divider { border: none; border-top: 1px solid #e5e7eb; margin: 4px 0; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        const { useState, createElement: h } = React;
+
+        // 簡約線條圖標
+        const Icons = {
+            overview: () => h('svg', { className: 'nav-icon', viewBox: '0 0 24 24' },
+                h('rect', { x: 3, y: 3, width: 7, height: 7 }),
+                h('rect', { x: 14, y: 3, width: 7, height: 7 }),
+                h('rect', { x: 14, y: 14, width: 7, height: 7 }),
+                h('rect', { x: 3, y: 14, width: 7, height: 7 })
+            ),
+            phone: () => h('svg', { className: 'nav-icon', viewBox: '0 0 24 24' },
+                h('path', { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z' })
+            ),
+            star: () => h('svg', { className: 'nav-icon', viewBox: '0 0 24 24' },
+                h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2' })
+            ),
+            car: () => h('svg', { className: 'nav-icon', viewBox: '0 0 24 24' },
+                h('path', { d: 'M5 17h14v2a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-2z' }),
+                h('path', { d: 'M20.772 10A1 1 0 0 0 20 9H4a1 1 0 0 0-.772.36L1 13h22l-2.228-3.64z' }),
+                h('circle', { cx: 7, cy: 15, r: 1 }),
+                h('circle', { cx: 17, cy: 15, r: 1 })
+            ),
+            settings: () => h('svg', { className: 'nav-icon', viewBox: '0 0 24 24' },
+                h('circle', { cx: 12, cy: 12, r: 3 }),
+                h('path', { d: 'M12 1v6m0 6v6m5.5-11.5l-4.2 4.2m0 4.2l4.2 4.2M23 12h-6m-6 0H5m11.5 5.5l-4.2-4.2m0-4.2l4.2-4.2' })
+            ),
+            dollar: () => h('svg', { className: 'nav-icon', viewBox: '0 0 24 24' },
+                h('line', { x1: 12, y1: 1, x2: 12, y2: 23 }),
+                h('path', { d: 'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' })
+            ),
+            heart: () => h('svg', { className: 'nav-icon', viewBox: '0 0 24 24' },
+                h('path', { d: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z' })
+            ),
+            sparkles: () => h('svg', { className: 'nav-icon', viewBox: '0 0 24 24' },
+                h('path', { d: 'M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z' }),
+                h('path', { d: 'M19 12l.75 2.25L22 15l-2.25.75L19 18l-.75-2.25L16 15l2.25-.75L19 12z' })
+            ),
+            message: () => h('svg', { className: 'nav-icon', viewBox: '0 0 24 24' },
+                h('path', { d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z' })
+            ),
+            report: () => h('svg', { className: 'nav-icon', viewBox: '0 0 24 24' },
+                h('path', { d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' }),
+                h('polyline', { points: '14 2 14 8 20 8' }),
+                h('line', { x1: 16, y1: 13, x2: 8, y2: 13 }),
+                h('line', { x1: 16, y1: 17, x2: 8, y2: 17 }),
+                h('polyline', { points: '10 9 9 9 8 9' })
+            )
+        };
+
+        const NAV_ITEMS = [
+            { id: 'overview', label: '總覽', category: 'main', icon: 'overview' },
+            { id: 'tcs', label: 'TCS 0800', category: 'satisfaction', iframe: 'tcs.html', icon: 'phone' },
+            { id: 'ssi', label: 'SSI 滿意度', category: 'satisfaction', iframe: 'ssi.html', icon: 'star' },
+            { id: 'testdrive', label: '試乘滿意度', category: 'satisfaction', iframe: 'testdrive.html', icon: 'car' },
+            { id: 'csi', label: 'CSI 滿意度', category: 'satisfaction', iframe: 'csi.html', icon: 'settings' },
+            { id: 'aftercare', label: '售後關懷', category: 'satisfaction', construction: true, icon: 'heart' },
+            { id: 'carcare', label: '車美部', category: 'business', iframe: '../carcare/carcare_overview.html', icon: 'sparkles' },
+            { id: 'carcare_performance', label: '└ 業績明細', category: 'business', iframe: '../carcare/carcare_performance.html', icon: 'sparkles', indent: true },
+            { id: 'carcare_campaign', label: '└ 活動優惠', category: 'business', iframe: '../carcare/carcare_campaign.html', icon: 'sparkles', indent: true },
+            { id: 'line', label: 'LINE@會員', category: 'business', iframe: 'line_overview.html', icon: 'message' },
+            { id: 'line_performance', label: '└ 績效數據', category: 'business', iframe: 'line_performance.html', icon: 'message', indent: true },
+            { id: 'line_binding', label: '└ 會員綁定', category: 'business', iframe: 'line_binding.html', icon: 'message', indent: true },
+            { id: 'line_campaign', label: '└ 推播方案', category: 'business', iframe: 'line_campaign_3.html', icon: 'message', indent: true },
+            { id: 'report', label: '當期匯報', category: 'report', iframe: 'report.html', icon: 'report' },
+        ];
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('overview');
+            const activeItem = NAV_ITEMS.find(item => item.id === activeTab);
+
+            // MG Logo (八角形)
+            const mgLogo = h('svg', {
+                width: 44,
+                height: 51,
+                viewBox: '0 0 50 58',
+                style: { filter: 'drop-shadow(0 4px 12px rgba(185, 28, 28, 0.4))' }
+            },
+                h('polygon', {
+                    points: '15,2 35,2 48,15 48,35 35,48 15,48 2,35 2,15',
+                    fill: '#b91c1c',
+                    stroke: '#ffffff',
+                    strokeWidth: '1.5'
+                }),
+                h('text', {
+                    x: 25, y: 31,
+                    fontSize: 20,
+                    fontWeight: 'bold',
+                    fill: 'white',
+                    textAnchor: 'middle',
+                    fontFamily: 'serif',
+                    letterSpacing: '-1'
+                }, 'MG'),
+                h('text', {
+                    x: 25, y: 55,
+                    fontSize: 7,
+                    fill: '#b91c1c',
+                    textAnchor: 'middle',
+                    fontWeight: 600
+                }, 'Since 1924')
+            );
+
+            // Logo 區
+            const logo = h('div', { 
+                style: { 
+                    padding: '24px 20px 20px',
+                    borderBottom: '1px solid #334155'
+                } 
+            },
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' } },
+                    mgLogo
+                ),
+                h('div', { style: { fontSize: '14px', fontWeight: '700', color: 'white', marginBottom: '2px' } }, '顧關部整合'),
+                h('div', { style: { fontSize: '11px', color: '#94a3b8' } }, '銘勁汽車')
+            );
+
+            // 導航按鈕
+            const createNavButton = (item) => {
+                const IconComponent = Icons[item.icon];
+                return h('button', {
+                    key: item.id,
+                    className: `nav-button ${activeTab === item.id ? 'active' : ''} ${item.indent ? 'indent' : ''}`,
+                    onClick: () => setActiveTab(item.id)
+                },
+                    !item.indent && IconComponent ? IconComponent() : null,
+                    h('span', { style: { flex: 1 } }, item.label)
+                );
+            };
+
+            // 左側導航
+            const sidebar = h('div', { className: 'sidebar' },
+                logo,
+                // 主功能
+                h('div', { className: 'nav-section' },
+                    h('div', { className: 'nav-section-title' }, '主功能'),
+                    createNavButton(NAV_ITEMS[0])
+                ),
+                // 顧客滿意度
+                h('div', { className: 'nav-section' },
+                    h('div', { className: 'nav-section-title' }, '顧客滿意度'),
+                    ...NAV_ITEMS.filter(item => item.category === 'satisfaction').map(createNavButton)
+                ),
+                // 營運業務
+                h('div', { className: 'nav-section' },
+                    h('div', { className: 'nav-section-title' }, '營運業務'),
+                    ...NAV_ITEMS.filter(item => item.category === 'business').map(createNavButton)
+                ),
+                // 當期匯報
+                h('div', { className: 'nav-section' },
+                    h('div', { className: 'nav-section-title' }, '當期匯報'),
+                    ...NAV_ITEMS.filter(item => item.category === 'report').map(createNavButton)
+                )
+            );
+
+            // 系統卡片資料
+            const systemCards = [
+                { id: 'tcs',       title: 'TCS 0800',   subtitle: '案件追蹤系統',   icon: 'phone',    status: 'running' },
+                { id: 'ssi',       title: 'SSI 滿意度', subtitle: '交車滿意度追蹤', icon: 'star',     status: 'running' },
+                { id: 'testdrive', title: '試乘滿意度', subtitle: '試乘體驗追蹤',   icon: 'car',      status: 'running' },
+                { id: 'csi',       title: 'CSI 滿意度', subtitle: '保養維修核算',   icon: 'settings', status: 'running' },
+                { id: 'aftercare', title: '售後關懷',   subtitle: '回訪追蹤系統',   icon: 'heart',    status: 'construction' },
+                { id: 'carcare',   title: '車美部',     subtitle: '車美服務追蹤',   icon: 'sparkles', status: 'running' },
+                { id: 'line',      title: 'LINE@會員',  subtitle: '會員管理系統',   icon: 'message',  status: 'running' },
+                { id: 'report',    title: '當期匯報',   subtitle: 'AI 整合匯報',    icon: 'report',   status: 'running' },
+            ];
+
+            // 各分層卡片設定
+            const sectionDefs = [
+                {
+                    label: '顧客滿意度',
+                    iconColor: 'red',
+                    items: systemCards.filter(c => ['tcs','ssi','testdrive','csi','aftercare'].includes(c.id))
+                },
+                {
+                    label: '營運業務',
+                    iconColor: 'blue',
+                    items: systemCards.filter(c => ['carcare','line'].includes(c.id))
+                },
+                {
+                    label: '當期匯報',
+                    iconColor: 'amber',
+                    items: systemCards.filter(c => ['report'].includes(c.id))
+                }
+            ];
+
+            const makeCard = (card, iconColor) => {
+                const CardIcon = Icons[card.icon];
+                return h('div', {
+                    key: card.id,
+                    className: `overview-card${card.status === 'construction' ? ' dimmed' : ''}`,
+                    onClick: () => setActiveTab(card.id)
+                },
+                    h('div', { className: `card-icon ${iconColor}` }, CardIcon ? CardIcon() : null),
+                    h('div', {},
+                        h('h3', { style: { fontSize: '12px', fontWeight: '700', color: '#111827', marginBottom: '2px' } }, card.title),
+                        h('p',  { style: { fontSize: '10px', color: '#6b7280', margin: 0 } }, card.subtitle)
+                    ),
+                    h('span', {
+                        className: `status-badge ${card.status === 'running' ? 'status-running' : 'status-construction'}`
+                    }, card.status === 'running' ? '運行中' : '建構中')
+                );
+            };
+
+            // 總覽頁面
+            const overviewPage = h('div', { style: { padding: '0' } },
+                // 方案A標題
+                h('div', { style: { background: 'white', borderBottom: '1px solid #e5e7eb', padding: '14px 24px', position: 'sticky', top: 0, zIndex: 10 } },
+                    h('div', { style: { fontSize: '11px', color: '#9ca3af', marginBottom: '6px' } }, '顧關部'),
+                    h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '10px' } },
+                        h('div', { style: { width: '3px', minHeight: '22px', background: '#b91c1c', borderRadius: '0', marginTop: '2px', flexShrink: 0 } }),
+                        h('div', {},
+                            h('h1', { style: { fontSize: '17px', fontWeight: '600', color: '#111827', margin: 0, lineHeight: '1.3' } }, '系統總覽'),
+                            h('div', { style: { fontSize: '12px', color: '#6b7280', marginTop: '2px' } }, '銘勁汽車 · 顧關部整合儀表板')
+                        )
+                    )
+                ),
+                // 分層卡片
+                h('div', { style: { padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1000px' } },
+                    ...sectionDefs.map((sec, si) => h('div', { key: sec.label },
+                        si > 0 && h('hr', { className: 'overview-divider', style: { marginBottom: '20px' } }),
+                        h('div', { className: 'overview-section-label' }, sec.label),
+                        h('div', {
+                            style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }
+                        }, ...sec.items.map(card => makeCard(card, sec.iconColor)))
+                    ))
+                )
+            );
+
+            // 建構中頁面
+            const constructionPage = h('div', {
+                style: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%',
+                    padding: '32px'
+                }
+            },
+                h('div', { style: { textAlign: 'center', maxWidth: '400px' } },
+                    h('div', { 
+                        style: { 
+                            width: '80px',
+                            height: '80px',
+                            margin: '0 auto 24px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        } 
+                    },
+                        h('svg', { 
+                            style: { width: '40px', height: '40px', stroke: '#b91c1c' },
+                            viewBox: '0 0 24 24',
+                            fill: 'none',
+                            strokeWidth: 2,
+                            strokeLinecap: 'round',
+                            strokeLinejoin: 'round'
+                        },
+                            h('path', { d: 'M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83' })
+                        )
+                    ),
+                    h('h3', { 
+                        style: { 
+                            fontSize: '24px', 
+                            fontWeight: '600', 
+                            color: '#1d1d1f', 
+                            marginBottom: '12px' 
+                        } 
+                    }, '建構中'),
+                    h('p', { 
+                        style: { 
+                            fontSize: '14px', 
+                            color: '#6b7280',
+                            lineHeight: '1.6'
+                        } 
+                    }, `${activeItem?.label} 功能正在開發中，敬請期待`)
+                )
+            );
+
+            // 右側內容
+            const mainContent = h('div', { className: 'main-content' },
+                activeTab === 'overview' ? overviewPage :
+                    activeItem?.iframe ? h('iframe', { src: activeItem.iframe, title: activeItem.label }) :
+                        constructionPage
+            );
+
+            return h('div', { style: { display: 'flex', height: '100vh' } },
+                sidebar,
+                mainContent
+            );
+        }
+
+        // 渲染
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(h(App));
+    </script>
+</body>
+</html>
