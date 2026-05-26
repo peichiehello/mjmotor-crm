@@ -1,1 +1,67 @@
+name: AI 匯報產生
 
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: '匯報數據 prompt'
+        required: true
+        type: string
+      request_id:
+        description: '請求 ID（防止快取）'
+        required: true
+        type: string
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 呼叫 Claude API
+        id: claude
+        run: |
+          RESPONSE=$(curl -s -X POST https://api.anthropic.com/v1/messages \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: ${{ secrets.ANTHROPIC_API_KEY }}" \
+            -H "anthropic-version: 2023-06-01" \
+            -d '{
+              "model": "claude-sonnet-4-20250514",
+              "max_tokens": 1200,
+              "messages": [{
+                "role": "user",
+                "content": ${{ toJSON(inputs.prompt) }}
+              }]
+            }')
+          echo "response<<EOF" >> $GITHUB_OUTPUT
+          echo "$RESPONSE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: 寫入結果
+        run: |
+          mkdir -p api_result
+          cat > api_result/latest.json << 'JSONEOF'
+          ${{ steps.claude.outputs.response }}
+          JSONEOF
+          python3 -c "
+          import json, datetime
+          with open('api_result/latest.json') as f:
+              data = json.load(f)
+          data['request_id'] = '${{ inputs.request_id }}'
+          data['generated_at'] = datetime.datetime.utcnow().isoformat() + 'Z'
+          with open('api_result/latest.json', 'w', encoding='utf-8') as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+          print('寫入完成')
+          "
+
+      - name: Commit 結果
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add api_result/latest.json
+          git commit -m "AI 匯報結果 ${{ inputs.request_id }}"
+          git push
